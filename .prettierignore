@@ -1,0 +1,20 @@
+# Dependencies
+**/node_modules/
+.pnpm-store/
+
+# Framework output
+**/.next/
+**/out/
+
+# Package builds
+**/dist/
+**/build/
+
+# Test output
+**/coverage/
+
+# Generated files
+**/next-env.d.ts
+
+# Lockfile
+pnpm-lock.yaml
