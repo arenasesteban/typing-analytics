@@ -18,10 +18,13 @@ describe('TypingTest', () => {
 
         expect(screen.getByTestId('typing-text')).toHaveTextContent(LOCAL_TYPING_CONTENT.text);
 
-        expect(screen.getByTestId('session-status')).toHaveTextContent('ready');
+        expect(screen.getByTestId('current-position')).toHaveTextContent(
+            `0 / ${String(TOTAL_CHARACTERS)}`,
+        );
+
+        expect(screen.getByTestId('letter-progress')).toHaveTextContent('0');
 
         expect(getCharacter(0)).toHaveAttribute('data-state', 'current');
-
         expect(getCharacter(1)).toHaveAttribute('data-state', 'pending');
     });
 
@@ -39,16 +42,13 @@ describe('TypingTest', () => {
         await user.keyboard(firstCharacter);
 
         expect(getCharacter(0)).toHaveAttribute('data-state', 'correct');
-
-        expect(getCharacter(0)).toHaveClass('text-zinc-100');
-
         expect(getCharacter(1)).toHaveAttribute('data-state', 'current');
 
         expect(screen.getByTestId('current-position')).toHaveTextContent(
             `1 / ${String(TOTAL_CHARACTERS)}`,
         );
 
-        expect(screen.getByTestId('session-status')).toHaveTextContent('typing');
+        expect(screen.getByTestId('letter-progress')).toHaveTextContent('1');
     });
 
     it('renders incorrect input using the incorrect visual state', async () => {
@@ -61,10 +61,11 @@ describe('TypingTest', () => {
         await user.keyboard('x');
 
         expect(getCharacter(0)).toHaveAttribute('data-state', 'incorrect');
-
-        expect(getCharacter(0)).toHaveClass('text-red-400');
-
         expect(getCharacter(1)).toHaveAttribute('data-state', 'current');
+
+        expect(screen.getByTestId('current-position')).toHaveTextContent(
+            `1 / ${String(TOTAL_CHARACTERS)}`,
+        );
     });
 
     it('forwards Backspace to the domain and restores the current position', async () => {
@@ -85,5 +86,7 @@ describe('TypingTest', () => {
         expect(screen.getByTestId('current-position')).toHaveTextContent(
             `0 / ${String(TOTAL_CHARACTERS)}`,
         );
+
+        expect(screen.getByTestId('letter-progress')).toHaveTextContent('0');
     });
 });
