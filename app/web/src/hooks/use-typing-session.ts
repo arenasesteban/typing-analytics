@@ -10,6 +10,7 @@ import { useCallback, useState, type KeyboardEvent } from 'react';
 interface UseTypingSessionResult {
     readonly session: TypingSessionState;
     readonly handleKeyDown: (event: KeyboardEvent<HTMLElement>) => void;
+    readonly restartSession: () => void;
 }
 
 export function useTypingSession(targetText: string): UseTypingSessionResult {
@@ -50,8 +51,13 @@ export function useTypingSession(targetText: string): UseTypingSessionResult {
         );
     }, []);
 
+    const restartSession = useCallback(() => {
+        setSession(createTypingSession(targetText));
+    }, [targetText]);
+
     return {
         session,
         handleKeyDown,
+        restartSession,
     };
 }

@@ -12,6 +12,13 @@ function getCharacter(position: number) {
     return screen.getByTestId(`character-${String(position)}`);
 }
 
+async function typeAttempt(user: ReturnType<typeof userEvent.setup>, text: string) {
+    const surface = screen.getByTestId('typing-surface');
+
+    await user.click(surface);
+    await user.keyboard(text);
+}
+
 describe('TypingTest', () => {
     it('renders the bundled local text before typing begins', () => {
         render(<TypingTest />);
@@ -26,6 +33,8 @@ describe('TypingTest', () => {
 
         expect(getCharacter(0)).toHaveAttribute('data-state', 'current');
         expect(getCharacter(1)).toHaveAttribute('data-state', 'pending');
+
+        expect(screen.queryByTestId('typing-results')).not.toBeInTheDocument();
     });
 
     it('forwards correct keyboard input to the domain and advances the current position', async () => {
@@ -33,16 +42,14 @@ describe('TypingTest', () => {
 
         render(<TypingTest />);
 
-        const surface = screen.getByTestId('typing-surface');
-
-        await user.click(surface);
-
         const firstCharacter = LOCAL_TYPING_CONTENT.text.slice(0, 1);
 
-        await user.keyboard(firstCharacter);
+        await typeAttempt(user, firstCharacter);
 
         expect(getCharacter(0)).toHaveAttribute('data-state', 'correct');
         expect(getCharacter(1)).toHaveAttribute('data-state', 'current');
+
+        expect(screen.getByTestId('session-status')).toHaveTextContent('active');
 
         expect(screen.getByTestId('current-position')).toHaveTextContent(
             `1 / ${String(TOTAL_CHARACTERS)}`,
@@ -56,9 +63,7 @@ describe('TypingTest', () => {
 
         render(<TypingTest />);
 
-        await user.click(screen.getByTestId('typing-surface'));
-
-        await user.keyboard('x');
+        await typeAttempt(user, 'x');
 
         expect(getCharacter(0)).toHaveAttribute('data-state', 'incorrect');
         expect(getCharacter(1)).toHaveAttribute('data-state', 'current');
@@ -73,9 +78,7 @@ describe('TypingTest', () => {
 
         render(<TypingTest />);
 
-        await user.click(screen.getByTestId('typing-surface'));
-
-        await user.keyboard('x');
+        await typeAttempt(user, 'x');
 
         expect(getCharacter(0)).toHaveAttribute('data-state', 'incorrect');
 
@@ -88,5 +91,92 @@ describe('TypingTest', () => {
         );
 
         expect(screen.getByTestId('letter-progress')).toHaveTextContent('0');
+    });
+
+    it('shows results only after the typing session completes', async () => {
+        const user = userEvent.setup();
+
+        render(<TypingTest />);
+
+        expect(screen.queryByTestId('typing-results')).not.toBeInTheDocument();
+
+        await typeAttempt(user, LOCAL_TYPING_CONTENT.text);
+
+        expect(screen.getByTestId('session-status')).toHaveTextContent('completed');
+
+        expect(screen.getByTestId('typing-results')).toBeInTheDocument();
+
+        expect(screen.queryByTestId('typing-surface')).not.toBeInTheDocument();
+
+        expect(screen.queryByTestId('current-position')).not.toBeInTheDocument();
+
+        expect(screen.queryByTestId('letter-progress')).not.toBeInTheDocument();
+    });
+
+    it('renders the approved result summary from the completed session', async () => {
+        const user = userEvent.setup();
+
+        render(<TypingTest />);
+
+        await typeAttempt(user, LOCAL_TYPING_CONTENT.text);
+
+        expect(screen.getByTestId('result-wpm')).toBeInTheDocument();
+
+        expect(screen.getByTestId('result-raw-wpm')).toBeInTheDocument();
+
+        expect(screen.getByTestId('result-accuracy')).toHaveTextContent('100.0%');
+
+        expect(screen.getByTestId('result-consistency')).toBeInTheDocument();
+
+        expect(screen.getByTestId('result-duration')).toBeInTheDocument();
+
+        expect(screen.getByTestId('result-errors')).toHaveTextContent('0');
+    });
+
+    it('restarts with a clean session and allows another test to complete', async () => {
+        const user = userEvent.setup();
+
+        render(<TypingTest />);
+
+        const incorrectAttempt = `x${LOCAL_TYPING_CONTENT.text.slice(1)}`;
+
+        await typeAttempt(user, incorrectAttempt);
+
+        expect(screen.getByTestId('typing-results')).toBeInTheDocument();
+
+        expect(screen.getByTestId('result-errors')).toHaveTextContent('1');
+
+        expect(screen.getByTestId('result-accuracy')).not.toHaveTextContent('100.0%');
+
+        await user.click(
+            screen.getByRole('button', {
+                name: 'Restart test',
+            }),
+        );
+
+        expect(screen.queryByTestId('typing-results')).not.toBeInTheDocument();
+
+        expect(screen.getByTestId('typing-surface')).toBeInTheDocument();
+
+        expect(screen.getByTestId('session-status')).toHaveTextContent('idle');
+
+        expect(screen.getByTestId('current-position')).toHaveTextContent(
+            `0 / ${String(TOTAL_CHARACTERS)}`,
+        );
+
+        expect(screen.getByTestId('letter-progress')).toHaveTextContent('0');
+
+        expect(getCharacter(0)).toHaveAttribute('data-state', 'current');
+        expect(getCharacter(1)).toHaveAttribute('data-state', 'pending');
+
+        await typeAttempt(user, LOCAL_TYPING_CONTENT.text);
+
+        expect(screen.getByTestId('session-status')).toHaveTextContent('completed');
+
+        expect(screen.getByTestId('typing-results')).toBeInTheDocument();
+
+        expect(screen.getByTestId('result-errors')).toHaveTextContent('0');
+
+        expect(screen.getByTestId('result-accuracy')).toHaveTextContent('100.0%');
     });
 });
