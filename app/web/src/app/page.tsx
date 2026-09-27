@@ -1,6 +1,6 @@
-import { AppFooter } from "@/components/layout/app-footer";
-import { AppHeader } from "@/components/layout/app-header";
-import { TypingTest } from "@/components/typing-test/typing-test";
+import { AppFooter } from '@/components/layout/app-footer';
+import { AppHeader } from '@/components/layout/app-header';
+import { TypingTest } from '@/components/typing-test/typing-test';
 
 export default function Home() {
     return (

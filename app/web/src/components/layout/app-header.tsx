@@ -1,4 +1,4 @@
-import { LOCAL_TYPING_CONTENT } from "@/content/typing-content";
+import { LOCAL_TYPING_CONTENT } from '@/content/typing-content';
 
 export function AppHeader() {
     return (
@@ -10,16 +10,14 @@ export function AppHeader() {
                         className="size-1.5 shrink-0 rounded-full bg-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.45)]"
                     />
 
-                    <span className="whitespace-nowrap text-xs font-semibold tracking-wide text-zinc-100">
+                    <span className="text-xs font-semibold tracking-wide whitespace-nowrap text-zinc-100">
                         Typing Analytics
                     </span>
                 </div>
 
                 <span className="border border-zinc-800 bg-zinc-900/70 px-2 py-1 text-[10px] tracking-wide text-zinc-500">
-                    lang:{" "}
-                    <span className="text-amber-300">
-                        {LOCAL_TYPING_CONTENT.languageLabel}
-                    </span>
+                    lang:{' '}
+                    <span className="text-amber-300">{LOCAL_TYPING_CONTENT.languageLabel}</span>
                 </span>
             </div>
         </header>
