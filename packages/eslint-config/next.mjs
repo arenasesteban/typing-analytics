@@ -5,9 +5,9 @@ import eslintConfigPrettier from 'eslint-config-prettier/flat';
 import { baseConfig } from './base.mjs';
 
 export default defineConfig([
-    ...baseConfig,
-
     ...nextVitals,
+
+    ...baseConfig,
 
     globalIgnores(['.next/**', 'out/**', 'build/**', 'next-env.d.ts']),
 
