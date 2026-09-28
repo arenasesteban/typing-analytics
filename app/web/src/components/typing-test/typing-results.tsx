@@ -36,40 +36,23 @@ function formatDuration(durationMs: number): string {
     return `${(durationMs / 1_000).toFixed(1)} s`;
 }
 
-function ResultMetric({
-    label,
-    value,
-    testId,
-    icon: MetricIcon,
-}: ResultMetricProps) {
+function ResultMetric({ label, value, testId, icon: MetricIcon }: ResultMetricProps) {
     return (
         <div className="flex min-w-0 flex-col pt-4">
             <div className="text-muted flex items-center gap-2">
-                <MetricIcon
-                    size={16}
-                    stroke={1.75}
-                    aria-hidden="true"
-                />
+                <MetricIcon size={16} stroke={1.75} aria-hidden="true" />
 
-                <dt className="text-xs tracking-[0.14em] uppercase">
-                    {label}
-                </dt>
+                <dt className="text-xs tracking-[0.14em] uppercase">{label}</dt>
             </div>
 
-            <dd
-                data-testid={testId}
-                className="text-foreground mt-2 text-2xl font-semibold"
-            >
+            <dd data-testid={testId} className="text-foreground mt-2 text-2xl font-semibold">
                 {value}
             </dd>
         </div>
     );
 }
 
-export function TypingResults({
-    summary,
-    onRestart,
-}: TypingResultsProps) {
+export function TypingResults({ summary, onRestart }: TypingResultsProps) {
     return (
         <section
             data-testid="typing-results"
@@ -78,15 +61,9 @@ export function TypingResults({
         >
             <header className="mb-10">
                 <div className="text-accent-strong flex items-center gap-2">
-                    <IconCircleCheck
-                        size={17}
-                        stroke={1.8}
-                        aria-hidden="true"
-                    />
+                    <IconCircleCheck size={17} stroke={1.8} aria-hidden="true" />
 
-                    <p className="text-xs tracking-[0.16em] uppercase">
-                        session complete
-                    </p>
+                    <p className="text-xs tracking-[0.16em] uppercase">session complete</p>
                 </div>
 
                 <h2
@@ -98,17 +75,10 @@ export function TypingResults({
             </header>
 
             <div className="mb-10 flex items-end gap-4">
-                <IconGauge
-                    size={26}
-                    stroke={1.6}
-                    className="text-accent mb-1"
-                    aria-hidden="true"
-                />
+                <IconGauge size={26} stroke={1.6} className="text-accent mb-1" aria-hidden="true" />
 
                 <div>
-                    <p className="text-muted text-xs tracking-[0.14em] uppercase">
-                        WPM
-                    </p>
+                    <p className="text-muted text-xs tracking-[0.14em] uppercase">WPM</p>
 
                     <p
                         data-testid="result-wpm"
@@ -159,14 +129,9 @@ export function TypingResults({
             <button
                 type="button"
                 onClick={onRestart}
-                className="border-border text-foreground-secondary hover:border-accent/50 hover:text-accent focus-visible:ring-accent mt-12 flex items-center gap-2 border px-4 py-2.5 text-sm transition-colors focus-visible:ring-2 focus-visible:outline-none cursor-pointer"
+                className="border-border text-foreground-secondary hover:border-accent/50 hover:text-accent focus-visible:ring-accent mt-12 flex cursor-pointer items-center gap-2 border px-4 py-2.5 text-sm transition-colors focus-visible:ring-2 focus-visible:outline-none"
             >
-                <IconRefresh
-                    size={17}
-                    stroke={1.8}
-                    aria-hidden="true"
-                />
-
+                <IconRefresh size={17} stroke={1.8} aria-hidden="true" />
                 Restart test
             </button>
         </section>
