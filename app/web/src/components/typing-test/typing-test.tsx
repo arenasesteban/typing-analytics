@@ -49,21 +49,19 @@ export function TypingTest() {
                     <TypingResults summary={summary} onRestart={restartSession} />
                 ) : (
                     <>
-                        <div className="mb-8 flex items-baseline gap-2 px-1 font-mono">
+                        <div className="mb-8 flex items-baseline gap-2 px-1">
                             <span
                                 data-testid="letter-progress"
-                                className="text-2xl leading-none font-medium text-amber-300 sm:text-3xl"
+                                className="text-accent text-2xl leading-none font-medium sm:text-3xl"
                             >
                                 {completedLetters}
                             </span>
 
-                            <span className="text-sm text-zinc-700">/</span>
+                            <span className="text-subtle text-sm">/</span>
 
-                            <span className="text-base text-zinc-500 sm:text-lg">
-                                {totalLetters}
-                            </span>
+                            <span className="text-muted text-base sm:text-lg">{totalLetters}</span>
 
-                            <span className="ml-1 text-[11px] tracking-[0.18em] text-zinc-600 uppercase">
+                            <span className="text-subtle ml-1 text-[11px] tracking-[0.18em] uppercase">
                                 letters
                             </span>
 
@@ -89,10 +87,10 @@ export function TypingTest() {
 
                         <p
                             id="typing-instructions"
-                            className="mt-6 px-1 font-mono text-xs tracking-wide text-zinc-500 sm:text-sm"
+                            className="text-muted mt-6 px-1 text-xs tracking-wide sm:text-sm"
                         >
                             Type to begin
-                            <span aria-hidden="true" className="mx-2 text-zinc-700">
+                            <span aria-hidden="true" className="text-subtle mx-2">
                                 ·
                             </span>
                             Backspace corrects the previous character

@@ -7,11 +7,11 @@ interface TypingTextProps {
 }
 
 const CHARACTER_STYLES: Record<CharacterVisualState, string> = {
-    pending: 'text-zinc-500',
+    pending: 'text-subtle',
     current:
-        "relative inline-block text-zinc-500 before:absolute before:left-[-0.08em] before:top-1/2 before:h-[1.05em] before:w-[2px] before:-translate-y-1/2 before:rounded-full before:bg-amber-300 before:content-[''] before:animate-pulse",
-    correct: 'text-zinc-100',
-    incorrect: 'text-red-400',
+        "relative inline-block text-subtle before:absolute before:left-[-0.08em] before:top-1/2 before:h-[1.05em] before:w-[2px] before:-translate-y-1/2 before:rounded-full before:bg-accent before:content-[''] before:animate-pulse",
+    correct: 'text-foreground',
+    incorrect: 'text-danger',
 };
 
 function getCharacterVisualState(
@@ -37,7 +37,7 @@ export function TypingText({ session }: TypingTextProps) {
     return (
         <p
             data-testid="typing-text"
-            className="w-full font-mono text-[1.45rem] leading-[1.9] tracking-[0.045em] whitespace-pre-wrap sm:text-[1.65rem] lg:text-[1.8rem]"
+            className="w-full text-[1.45rem] leading-[1.9] tracking-[0.045em] whitespace-pre-wrap sm:text-[1.65rem] lg:text-[1.8rem]"
         >
             {characters.map((character, position) => {
                 const visualState = getCharacterVisualState(session, position);

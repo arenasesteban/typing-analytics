@@ -29,18 +29,18 @@ function ResultMetric({ label, value, testId, primary = false }: ResultMetricPro
         <div
             className={
                 primary
-                    ? 'rounded-lg border border-amber-400/30 bg-amber-400/5 p-5'
-                    : 'rounded-lg border border-zinc-800 bg-zinc-950/40 p-5'
+                    ? 'border-accent-strong/30 bg-accent-strong/5 rounded-lg border p-5'
+                    : 'border-border-strong bg-surface-raised/40 rounded-lg border p-5'
             }
         >
-            <dt className="font-mono text-xs tracking-widest text-zinc-500 uppercase">{label}</dt>
+            <dt className="text-muted text-xs tracking-widest uppercase">{label}</dt>
 
             <dd
                 data-testid={testId}
                 className={
                     primary
-                        ? 'mt-2 font-mono text-4xl font-semibold text-amber-300'
-                        : 'mt-2 font-mono text-2xl font-semibold text-zinc-100'
+                        ? 'text-accent mt-2 text-4xl font-semibold'
+                        : 'text-foreground mt-2 text-2xl font-semibold'
                 }
             >
                 {value}
@@ -54,14 +54,17 @@ export function TypingResults({ summary, onRestart }: TypingResultsProps) {
         <section
             data-testid="typing-results"
             aria-labelledby="typing-results-title"
-            className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-6 sm:p-8"
+            className="border-border-strong bg-surface/40 rounded-xl border p-6 sm:p-8"
         >
             <header className="mb-8">
-                <p className="font-mono text-xs tracking-widest text-amber-400 uppercase">
+                <p className="text-accent-strong text-xs tracking-widest uppercase">
                     session complete
                 </p>
 
-                <h2 id="typing-results-title" className="mt-2 text-2xl font-semibold text-zinc-100">
+                <h2
+                    id="typing-results-title"
+                    className="text-foreground mt-2 text-2xl font-semibold"
+                >
                     Results
                 </h2>
             </header>
@@ -108,7 +111,7 @@ export function TypingResults({ summary, onRestart }: TypingResultsProps) {
             <button
                 type="button"
                 onClick={onRestart}
-                className="mt-8 rounded-lg bg-amber-400 px-5 py-3 font-mono text-sm font-semibold text-zinc-950 transition hover:bg-amber-300 focus-visible:ring-2 focus-visible:ring-amber-300 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 focus-visible:outline-none"
+                className="bg-accent-strong text-background hover:bg-accent focus-visible:ring-accent focus-visible:ring-offset-background mt-8 rounded-lg px-5 py-3 text-sm font-semibold transition focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
             >
                 Restart test
             </button>
