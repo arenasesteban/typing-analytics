@@ -1,6 +1,20 @@
-import { BadRequestException, Body, Controller, Post } from '@nestjs/common';
+import {
+    BadRequestException,
+    Body,
+    Controller,
+    HttpCode,
+    HttpStatus,
+    Param,
+    ParseUUIDPipe,
+    Post,
+} from '@nestjs/common';
+import { CompleteTypingSessionPipe } from './complete-typing-session.pipe.js';
 import { TypingSessionsService } from './typing-sessions.service.js';
-import type { CreatedTypingSessionResponse } from './typing-sessions.types.js';
+import type {
+    CompleteTypingSessionRequest,
+    CompletedTypingSessionResponse,
+    CreatedTypingSessionResponse,
+} from './typing-sessions.types.js';
 
 function isEmptyObject(value: unknown): boolean {
     return (
@@ -22,5 +36,14 @@ export class TypingSessionsController {
         }
 
         return this.typingSessionsService.create();
+    }
+
+    @Post(':id/complete')
+    @HttpCode(HttpStatus.OK)
+    complete(
+        @Param('id', new ParseUUIDPipe()) id: string,
+        @Body(CompleteTypingSessionPipe) request: CompleteTypingSessionRequest,
+    ): Promise<CompletedTypingSessionResponse> {
+        return this.typingSessionsService.complete(id, request);
     }
 }
