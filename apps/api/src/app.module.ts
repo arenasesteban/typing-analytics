@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { validateEnvironment } from './config/env.validation.js';
 import { PrismaModule } from './prisma/prisma.module.js';
+import { TypingSessionsModule } from './typing-sessions/typing-sessions.module.js';
 
 @Module({
     imports: [
@@ -10,6 +11,7 @@ import { PrismaModule } from './prisma/prisma.module.js';
             validate: validateEnvironment,
         }),
         PrismaModule,
+        TypingSessionsModule,
     ],
 })
 export class AppModule {}

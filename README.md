@@ -20,7 +20,7 @@ apps/
 packages/
 └── typing-core/         Framework-independent TypeScript domain package
 
-compose.yaml       Local PostgreSQL infrastructure
+compose.yaml             Local PostgreSQL infrastructure
 ```
 
 ## Installation
@@ -98,7 +98,7 @@ Web: http://localhost:3000
 API: http://localhost:3001
 ```
 
-The API persistence baseline does not expose product endpoints yet.
+The API currently supports server-owned persistent typing session creation and completion.
 
 ## Database development
 
@@ -124,16 +124,97 @@ pnpm test
 pnpm build
 ```
 
-API/PostgreSQL integration:
+### API/PostgreSQL integration tests
+
+Create the local integration environment file:
+
+```powershell
+Copy-Item apps/api/.env.test.example apps/api/.env.test.local
+```
+
+Start the isolated PostgreSQL test service:
+
+```bash
+docker compose --profile test up -d postgres-test
+```
+
+Apply committed migrations:
+
+```bash
+pnpm --filter @typing-analytics/api prisma:migrate:test
+```
+
+Run integration tests:
 
 ```bash
 pnpm --filter @typing-analytics/api test:integration
 ```
 
+## API
+
+### Create a typing session
+
+```http
+POST /typing-sessions
+```
+
+Creates a new server-owned persistent typing session.
+
+The request does not accept client-generated session identifiers or arbitrary target text.
+
+Successful response:
+
+```json
+{
+    "id": "<server-generated-session-id>",
+    "typingText": {
+        "id": "<persisted-text-id>",
+        "text": "<target-text>"
+    }
+}
+```
+
+The endpoint returns `201 Created`.
+
+Unexpected request data is rejected with `400 Bad Request`.
+
+### Complete a typing session
+
+```http
+POST /typing-sessions/:id/complete
+```
+
+Completes an existing persistent typing session from its serialized typing inputs.
+
+```json
+{
+    "inputs": [
+        {
+            "type": "insert",
+            "value": "t",
+            "timestampMs": 1000
+        }
+    ]
+}
+```
+
+The server replays the inputs through `@typing-analytics/typing-core`, recalculates the session metrics and persists the validated result.
+
+Client-provided derived metrics are not accepted.
+
+A successful completion returns `200 OK`.
+
+Relevant errors include:
+
+- `400 Bad Request` for invalid session data or interactions.
+- `404 Not Found` when the session does not exist.
+- `409 Conflict` when the session has already been completed.
+- `413 Payload Too Large` when the input limit is exceeded.
+
 ## Current scope
 
 Development is currently progressing through v0.2.0 — Persistent Sessions.
 
-The repository now provides the backend and PostgreSQL persistence baseline required for persistent typing sessions.
+The repository now provides the backend and PostgreSQL persistence baseline together with server-owned persistent typing session creation and completion.
 
-Session creation, session completion, authentication, private history, behavioral analytics, application containers, and cloud infrastructure are outside the current baseline.
+Frontend integration, authentication, private history, behavioral analytics, application containers, and cloud infrastructure are outside the current implemented scope.
