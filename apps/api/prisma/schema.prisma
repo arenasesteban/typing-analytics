@@ -9,7 +9,7 @@ datasource db {
 
 model TypingText {
   id       String          @id @default(uuid()) @db.Uuid
-  text     String
+  text     String          @unique
   sessions TypingSession[]
 
   @@map("typing_texts")

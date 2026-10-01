@@ -1,5 +1,5 @@
 import { config } from 'dotenv';
-import { defineConfig } from 'vitest/config';
+import { defineConfig } from 'prisma/config';
 
 if (process.env['DATABASE_URL'] === undefined) {
     const result = config({
@@ -14,13 +14,11 @@ if (process.env['DATABASE_URL'] === undefined) {
 }
 
 export default defineConfig({
-    resolve: {
-        tsconfigPaths: true,
+    schema: 'prisma/schema.prisma',
+    migrations: {
+        path: 'prisma/migrations',
     },
-    test: {
-        globals: true,
-        root: './',
-        include: ['test/**/*.integration-spec.ts'],
-        fileParallelism: false,
+    datasource: {
+        url: process.env['DATABASE_URL'],
     },
 });
