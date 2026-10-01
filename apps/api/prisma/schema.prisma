@@ -1,0 +1,35 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model TypingText {
+  id       String          @id @default(uuid()) @db.Uuid
+  text     String
+  sessions TypingSession[]
+
+  @@map("typing_texts")
+}
+
+model TypingSession {
+  id              String    @id @default(uuid()) @db.Uuid
+  typingTextId    String    @map("typing_text_id") @db.Uuid
+  durationMs      Int?      @map("duration_ms")
+  wpm             Float?
+  rawWpm          Float?    @map("raw_wpm")
+  accuracy        Float?
+  consistency     Float?
+  totalInputs     Int?      @map("total_inputs")
+  correctInputs   Int?      @map("correct_inputs")
+  incorrectInputs Int?      @map("incorrect_inputs")
+  startedAt       DateTime? @map("started_at")
+  completedAt     DateTime? @map("completed_at")
+
+  typingText TypingText @relation(fields: [typingTextId], references: [id], onDelete: Restrict)
+
+  @@map("typing_sessions")
+}

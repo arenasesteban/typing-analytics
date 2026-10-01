@@ -19,3 +19,6 @@ coverage/
 # OS
 .DS_Store
 Thumbs.db
+
+# Generated application artifacts
+apps/api/src/generated/prisma/
