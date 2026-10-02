@@ -10,10 +10,17 @@ import {
     type Icon,
 } from '@tabler/icons-react';
 
-import type { CompletedSessionSummary } from '@typing-analytics/typing-core';
+export interface TypingResultSummary {
+    readonly durationMs: number;
+    readonly wpm: number;
+    readonly rawWpm: number;
+    readonly accuracy: number;
+    readonly consistency: number;
+    readonly incorrectInputs: number;
+}
 
 interface TypingResultsProps {
-    readonly summary: CompletedSessionSummary;
+    readonly summary: TypingResultSummary;
     readonly onRestart: () => void;
 }
 
@@ -63,7 +70,7 @@ export function TypingResults({ summary, onRestart }: TypingResultsProps) {
                 <div className="text-accent-strong flex items-center gap-2">
                     <IconCircleCheck size={17} stroke={1.8} aria-hidden="true" />
 
-                    <p className="text-xs tracking-[0.16em] uppercase">session complete</p>
+                    <p className="text-xs tracking-[0.16em] uppercase">session saved</p>
                 </div>
 
                 <h2

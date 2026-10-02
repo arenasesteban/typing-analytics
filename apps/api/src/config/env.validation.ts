@@ -1,3 +1,31 @@
+function normalizeWebOrigin(value: unknown): string {
+    const candidate =
+        typeof value === 'string' && value.trim().length > 0
+            ? value.trim()
+            : 'http://localhost:3000';
+
+    let parsedOrigin: URL;
+
+    try {
+        parsedOrigin = new URL(candidate);
+    } catch {
+        throw new Error('WEB_ORIGIN must be a valid HTTP or HTTPS origin');
+    }
+
+    if (
+        (parsedOrigin.protocol !== 'http:' && parsedOrigin.protocol !== 'https:') ||
+        parsedOrigin.username.length > 0 ||
+        parsedOrigin.password.length > 0 ||
+        parsedOrigin.pathname !== '/' ||
+        parsedOrigin.search.length > 0 ||
+        parsedOrigin.hash.length > 0
+    ) {
+        throw new Error('WEB_ORIGIN must be a valid HTTP or HTTPS origin');
+    }
+
+    return parsedOrigin.origin;
+}
+
 export function validateEnvironment(config: Record<string, unknown>): Record<string, unknown> {
     const databaseUrl = config['DATABASE_URL'];
 
@@ -15,5 +43,6 @@ export function validateEnvironment(config: Record<string, unknown>): Record<str
         ...config,
         DATABASE_URL: databaseUrl,
         PORT: port,
+        WEB_ORIGIN: normalizeWebOrigin(config['WEB_ORIGIN']),
     };
 }

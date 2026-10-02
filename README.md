@@ -43,6 +43,23 @@ Unix-like shells:
 cp apps/api/.env.example apps/api/.env
 ```
 
+Create the local web environment file from the provided example.
+
+PowerShell:
+
+```powershell
+Copy-Item apps/web/.env.example apps/web/.env.local
+```
+
+Unix-like shells:
+
+```bash
+cp apps/web/.env.example apps/web/.env.local
+```
+
+The web application uses `NEXT_PUBLIC_API_BASE_URL` to reach the REST API.
+The API uses `WEB_ORIGIN` to allow the configured browser origin.
+
 Generate Prisma Client:
 
 ```bash
@@ -98,7 +115,14 @@ Web: http://localhost:3000
 API: http://localhost:3001
 ```
 
-The API currently supports server-owned persistent typing session creation and completion.
+The persistent typing-session API exposes:
+
+```text
+POST /typing-sessions
+POST /typing-sessions/:id/complete
+```
+
+The browser creates a persistent session before typing, processes each keystroke locally through `typing-core`, and sends one replayable input batch when the local session completes.
 
 ## Database development
 
@@ -201,7 +225,6 @@ Completes an existing persistent typing session from its serialized typing input
 The server replays the inputs through `@typing-analytics/typing-core`, recalculates the session metrics and persists the validated result.
 
 Client-provided derived metrics are not accepted.
-
 A successful completion returns `200 OK`.
 
 Relevant errors include:
@@ -215,6 +238,6 @@ Relevant errors include:
 
 Development is currently progressing through v0.2.0 — Persistent Sessions.
 
-The repository now provides the backend and PostgreSQL persistence baseline together with server-owned persistent typing session creation and completion.
+The browser obtains the persistent session identifier and target text from the API. Typing remains local per keystroke through `typing-core`, while completion is replayed and validated by the server before the persisted result is shown.
 
-Frontend integration, authentication, private history, behavioral analytics, application containers, and cloud infrastructure are outside the current implemented scope.
+Authentication, ownership, private history, behavioral analytics, multi-layer browser E2E, application containers, and cloud infrastructure remain outside the current scope.
