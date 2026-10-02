@@ -234,6 +234,16 @@ Relevant errors include:
 - `409 Conflict` when the session has already been completed.
 - `413 Payload Too Large` when the input limit is exceeded.
 
+## Continuous Integration
+
+GitHub Actions validates pull requests and pushes to `main`.
+
+The general validation job runs formatting checks, linting, typechecking, unit/component tests, and workspace builds.
+
+A separate API/PostgreSQL integration job provisions an ephemeral PostgreSQL instance, applies all committed Prisma migrations from an empty database, and runs the API integration suite against that database.
+
+The CI database uses disposable test-only credentials defined in the workflow. No local environment file, permanent database credential, or application secret is required by CI.
+
 ## Current scope
 
 Development is currently progressing through v0.2.0 — Persistent Sessions.
