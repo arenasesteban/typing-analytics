@@ -1,13 +1,17 @@
 import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
+import { DEFAULT_TYPING_WORD_COUNT, ENGLISH_WORD_CORPUS } from '@typing-analytics/typing-core';
 import request from 'supertest';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+
 import { AppModule } from '../src/app.module.js';
 import { PrismaService } from '../src/prisma/prisma.service.js';
 import type { CreatedTypingSessionResponse } from '../src/typing-sessions/typing-sessions.types.js';
 
-const EXPECTED_TYPING_TEXT =
-    'typing analytics turns each practice session into clear feedback about speed accuracy and rhythm';
+const EXPECTED_CONTROLLED_TEXT = Array.from(
+    { length: DEFAULT_TYPING_WORD_COUNT },
+    () => ENGLISH_WORD_CORPUS[0],
+).join(' ');
 
 describe('POST /typing-sessions', () => {
     let app: INestApplication;
@@ -29,21 +33,29 @@ describe('POST /typing-sessions', () => {
         await prisma.typingText.deleteMany();
     });
 
+    afterEach(() => {
+        vi.restoreAllMocks();
+    });
+
     afterAll(async () => {
         await prisma.typingSession.deleteMany();
         await prisma.typingText.deleteMany();
         await app.close();
     });
 
-    it('creates a persisted server-owned typing session', async () => {
-        const response = await request(app.getHttpServer()).post('/typing-sessions').expect(201);
+    it('generates and persists the exact target assigned to a new session', async () => {
+        const randomSpy = vi.spyOn(Math, 'random').mockReturnValue(0);
 
+        const response = await request(app.getHttpServer()).post('/typing-sessions').expect(201);
         const body = response.body as CreatedTypingSessionResponse;
 
+        expect(randomSpy).toHaveBeenCalledTimes(DEFAULT_TYPING_WORD_COUNT);
+
         expect(body.id).toEqual(expect.any(String));
+
         expect(body.typingText).toEqual({
             id: expect.any(String),
-            text: EXPECTED_TYPING_TEXT,
+            text: EXPECTED_CONTROLLED_TEXT,
         });
 
         const persistedSession = await prisma.typingSession.findUnique({
@@ -56,6 +68,7 @@ describe('POST /typing-sessions', () => {
         });
 
         expect(persistedSession).not.toBeNull();
+
         expect(persistedSession).toMatchObject({
             id: body.id,
             typingTextId: body.typingText.id,
@@ -71,12 +84,14 @@ describe('POST /typing-sessions', () => {
             completedAt: null,
             typingText: {
                 id: body.typingText.id,
-                text: EXPECTED_TYPING_TEXT,
+                text: EXPECTED_CONTROLLED_TEXT,
             },
         });
     });
 
-    it('creates independent sessions while reusing the persisted typing text', async () => {
+    it('executes target generation for every new session without requiring global uniqueness', async () => {
+        const randomSpy = vi.spyOn(Math, 'random').mockReturnValue(0);
+
         const firstResponse = await request(app.getHttpServer())
             .post('/typing-sessions')
             .expect(201);
@@ -88,14 +103,21 @@ describe('POST /typing-sessions', () => {
         const firstBody = firstResponse.body as CreatedTypingSessionResponse;
         const secondBody = secondResponse.body as CreatedTypingSessionResponse;
 
+        expect(randomSpy).toHaveBeenCalledTimes(DEFAULT_TYPING_WORD_COUNT * 2);
+
         expect(firstBody.id).not.toBe(secondBody.id);
+
+        expect(firstBody.typingText.text).toBe(EXPECTED_CONTROLLED_TEXT);
+        expect(secondBody.typingText.text).toBe(EXPECTED_CONTROLLED_TEXT);
+
         expect(firstBody.typingText).toEqual(secondBody.typingText);
 
         expect(await prisma.typingSession.count()).toBe(2);
+
         expect(
             await prisma.typingText.count({
                 where: {
-                    text: EXPECTED_TYPING_TEXT,
+                    text: EXPECTED_CONTROLLED_TEXT,
                 },
             }),
         ).toBe(1);

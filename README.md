@@ -122,6 +122,8 @@ POST /typing-sessions
 POST /typing-sessions/:id/complete
 ```
 
+Each new persistent typing session receives a concrete target generated from the approved English word corpus through `@typing-analytics/typing-core`.
+
 The browser creates a persistent session before typing, processes each keystroke locally through `typing-core`, and sends one replayable input batch when the local session completes.
 
 ## Database development
@@ -182,9 +184,9 @@ pnpm --filter @typing-analytics/api test:integration
 POST /typing-sessions
 ```
 
-Creates a new server-owned persistent typing session.
+Creates a new server-owned persistent typing session using a target generated from the approved English word corpus.
 
-The request does not accept client-generated session identifiers or arbitrary target text.
+The concrete generated target is persisted in `typing_texts` and associated with the new session. The request does not accept client-generated session identifiers or arbitrary target text.
 
 Successful response:
 
@@ -199,6 +201,8 @@ Successful response:
 ```
 
 The endpoint returns `201 Created`.
+
+Target generation runs for every new session creation. Generated targets are not required to be globally unique; if the same concrete text is generated again, the existing `typing_texts` row may be reused.
 
 Unexpected request data is rejected with `400 Bad Request`.
 
@@ -246,8 +250,8 @@ The CI database uses disposable test-only credentials defined in the workflow. N
 
 ## Current scope
 
-Development is currently progressing through v0.2.0 — Persistent Sessions.
+Development is currently progressing through v0.3.0 — Identity & Private History.
 
-The browser obtains the persistent session identifier and target text from the API. Typing remains local per keystroke through `typing-core`, while completion is replayed and validated by the server before the persisted result is shown.
+The repository provides the existing persistent typing-session lifecycle together with dynamic typing targets generated from the approved English word corpus.
 
 Authentication, ownership, private history, behavioral analytics, multi-layer browser E2E, application containers, and cloud infrastructure remain outside the current scope.

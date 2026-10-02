@@ -1,6 +1,6 @@
 import { ENGLISH_WORD_CORPUS } from './english-word-corpus';
 
-export const DEFAULT_TYPING_WORD_COUNT = 14;
+export const DEFAULT_TYPING_WORD_COUNT = 25;
 
 export type RandomSource = () => number;
 
