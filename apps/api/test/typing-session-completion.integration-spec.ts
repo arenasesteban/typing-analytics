@@ -17,9 +17,6 @@ import type {
     CreatedTypingSessionResponse,
 } from '../src/typing-sessions/typing-sessions.types.js';
 
-const EXPECTED_TYPING_TEXT =
-    'typing analytics turns each practice session into clear feedback about speed accuracy and rhythm';
-
 function buildCompletionInputs(
     targetText: string,
     startTimestampMs = 1_000,
@@ -141,7 +138,7 @@ describe('POST /typing-sessions/:id/complete', () => {
     });
 
     it('returns 404 for an unknown session', async () => {
-        const inputs = buildCompletionInputs(EXPECTED_TYPING_TEXT);
+        const inputs = buildCompletionInputs('unknown');
 
         await request(app.getHttpServer())
             .post(`/typing-sessions/${randomUUID()}/complete`)

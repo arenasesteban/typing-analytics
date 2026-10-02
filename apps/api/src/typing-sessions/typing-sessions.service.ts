@@ -7,12 +7,12 @@ import {
 import {
     applyTypingInput,
     createTypingSession,
+    generateTypingText,
     summarizeCompletedSession,
     type TypingInput,
     type TypingSessionState,
 } from '@typing-analytics/typing-core';
 import { PrismaService } from '../prisma/prisma.service.js';
-import { DEFAULT_TYPING_TEXT } from './typing-sessions.constants.js';
 import type {
     CompleteTypingSessionRequest,
     CompletedTypingSessionResponse,
@@ -24,13 +24,15 @@ export class TypingSessionsService {
     constructor(private readonly prisma: PrismaService) {}
 
     async create(): Promise<CreatedTypingSessionResponse> {
+        const generatedText = generateTypingText();
+
         const typingText = await this.prisma.typingText.upsert({
             where: {
-                text: DEFAULT_TYPING_TEXT,
+                text: generatedText,
             },
             update: {},
             create: {
-                text: DEFAULT_TYPING_TEXT,
+                text: generatedText,
             },
             select: {
                 id: true,
