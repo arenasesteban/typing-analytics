@@ -1,10 +1,8 @@
 'use client';
 
-import { summarizeCompletedSession } from '@typing-analytics/typing-core';
 import { useEffect, useRef } from 'react';
 
-import { LOCAL_TYPING_CONTENT } from '@/content/typing-content';
-import { useTypingSession } from '@/hooks/use-typing-session';
+import { useTypingSession, type TypingError } from '@/hooks/use-typing-session';
 
 import { TypingResults } from './typing-results';
 import { TypingText } from './typing-text';
@@ -19,35 +17,108 @@ function getCompletedLetters(targetText: string, currentPosition: number): numbe
     return countLetters(completedText);
 }
 
+interface AsyncStateProps {
+    readonly title: string;
+    readonly description: string;
+    readonly role: 'status' | 'alert';
+    readonly actionLabel?: string;
+    readonly onAction?: () => void;
+}
+
+function AsyncState({ title, description, role, actionLabel, onAction }: AsyncStateProps) {
+    return (
+        <div
+            role={role}
+            aria-live={role === 'status' ? 'polite' : 'assertive'}
+            className="max-w-2xl"
+        >
+            <p className="text-accent text-xs tracking-[0.16em] uppercase">persistent session</p>
+
+            <h2 className="text-foreground mt-3 text-2xl font-semibold">{title}</h2>
+
+            <p className="text-muted mt-3 text-sm leading-6">{description}</p>
+
+            {actionLabel !== undefined && onAction !== undefined ? (
+                <button
+                    type="button"
+                    onClick={onAction}
+                    className="border-border text-foreground-secondary hover:border-accent/50 hover:text-accent focus-visible:ring-accent mt-8 cursor-pointer border px-4 py-2.5 text-sm transition-colors focus-visible:ring-2 focus-visible:outline-none"
+                >
+                    {actionLabel}
+                </button>
+            ) : null}
+        </div>
+    );
+}
+
+function getErrorActionLabel(error: TypingError): string {
+    return error.phase === 'creation' ? 'Try again' : 'Start new test';
+}
+
 export function TypingTest() {
     const typingSurfaceRef = useRef<HTMLDivElement>(null);
 
-    const { session, handleKeyDown, restartSession } = useTypingSession(LOCAL_TYPING_CONTENT.text);
-
-    const totalCharacters = Array.from(session.targetText).length;
-
-    const totalLetters = countLetters(session.targetText);
-
-    const completedLetters = getCompletedLetters(session.targetText, session.currentPosition);
-
-    const summary = session.status === 'completed' ? summarizeCompletedSession(session) : null;
+    const { session, status, result, error, handleKeyDown, restartSession } = useTypingSession();
 
     useEffect(() => {
-        if (session.status === 'idle') {
+        if (status === 'ready' && session?.status === 'idle') {
             typingSurfaceRef.current?.focus();
         }
-    }, [session.status]);
+    }, [session?.status, status]);
+
+    const totalCharacters = session === null ? 0 : Array.from(session.targetText).length;
+
+    const totalLetters = session === null ? 0 : countLetters(session.targetText);
+
+    const completedLetters =
+        session === null ? 0 : getCompletedLetters(session.targetText, session.currentPosition);
 
     return (
         <section className="flex w-full flex-1 items-center">
             <div className="mx-auto w-full max-w-350 px-6 py-16 sm:px-10 lg:py-24">
-                <span data-testid="session-status" className="sr-only">
-                    {session.status}
+                <span data-testid="persistence-status" className="sr-only">
+                    {status}
                 </span>
 
-                {summary !== null ? (
-                    <TypingResults summary={summary} onRestart={restartSession} />
-                ) : (
+                <span data-testid="session-status" className="sr-only">
+                    {session?.status ?? 'unavailable'}
+                </span>
+
+                {status === 'creating' ? (
+                    <AsyncState
+                        role="status"
+                        title="Preparing your typing session"
+                        description="Creating a persistent session and loading its server-assigned text."
+                    />
+                ) : null}
+
+                {status === 'persisting' ? (
+                    <AsyncState
+                        role="status"
+                        title="Validating your results"
+                        description="Your typing is complete. The server is replaying the session and saving the validated result."
+                    />
+                ) : null}
+
+                {status === 'error' && error !== null ? (
+                    <AsyncState
+                        role="alert"
+                        title={
+                            error.phase === 'creation'
+                                ? 'Session could not be created'
+                                : 'Results could not be saved'
+                        }
+                        description={error.message}
+                        actionLabel={getErrorActionLabel(error)}
+                        onAction={restartSession}
+                    />
+                ) : null}
+
+                {status === 'completed' && result !== null ? (
+                    <TypingResults summary={result} onRestart={restartSession} />
+                ) : null}
+
+                {status === 'ready' && session !== null ? (
                     <>
                         <div className="mb-8 flex items-baseline gap-2 px-1">
                             <span
@@ -96,7 +167,7 @@ export function TypingTest() {
                             Backspace corrects the previous character
                         </p>
                     </>
-                )}
+                ) : null}
             </div>
         </section>
     );

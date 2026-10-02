@@ -1,7 +1,5 @@
 import { IconBrandGithub, IconLanguage } from '@tabler/icons-react';
 
-import { LOCAL_TYPING_CONTENT } from '@/content/typing-content';
-
 const REPOSITORY_URL = 'https://github.com/arenasesteban/typing-analytics';
 
 export function AppHeader() {
@@ -23,7 +21,7 @@ export function AppHeader() {
                     <div className="text-muted flex items-center gap-1.5">
                         <IconLanguage size={16} stroke={1.75} aria-hidden="true" />
 
-                        <span>{LOCAL_TYPING_CONTENT.languageLabel}</span>
+                        <span>English</span>
                     </div>
 
                     <a

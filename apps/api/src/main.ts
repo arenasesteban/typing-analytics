@@ -9,6 +9,13 @@ async function bootstrap(): Promise<void> {
 
     const configService = app.get(ConfigService);
     const port = configService.get<number>('PORT') ?? 3001;
+    const webOrigin = configService.get<string>('WEB_ORIGIN') ?? 'http://localhost:3000';
+
+    app.enableCors({
+        origin: webOrigin,
+        methods: ['POST'],
+        allowedHeaders: ['Content-Type'],
+    });
 
     await app.listen(port);
 }
