@@ -58,7 +58,20 @@ cp apps/web/.env.example apps/web/.env.local
 ```
 
 The web application uses `NEXT_PUBLIC_API_BASE_URL` to reach the REST API.
+
 The API uses `WEB_ORIGIN` to allow the configured browser origin.
+
+Authentication configuration additionally requires:
+
+```text
+JWT_ACCESS_SECRET
+JWT_ACCESS_TTL_SECONDS
+REFRESH_TOKEN_TTL_DAYS
+```
+
+`JWT_ACCESS_SECRET` must contain at least 32 bytes and must not be committed with a real deployment secret.
+
+Access tokens are short-lived bearer tokens. Renewable authentication uses a rotating opaque refresh credential delivered through an `HttpOnly` cookie; only its SHA-256 hash is persisted.
 
 Generate Prisma Client:
 
@@ -113,6 +126,27 @@ The default local ports are:
 ```text
 Web: http://localhost:3000
 API: http://localhost:3001
+```
+
+The web authentication routes are:
+
+```text
+/login
+/register
+```
+
+Browser authentication keeps the short-lived access token only in React memory. Session recovery uses the rotating refresh credential stored in the API-managed `HttpOnly` cookie and then loads the current identity through `GET /auth/me`.
+
+No password, refresh credential, or reusable authentication secret is persisted in `localStorage` or `sessionStorage`.
+
+The authentication API exposes:
+
+```text
+POST /auth/register
+POST /auth/login
+POST /auth/refresh
+POST /auth/logout
+GET  /auth/me
 ```
 
 The persistent typing-session API exposes:
@@ -178,6 +212,58 @@ pnpm --filter @typing-analytics/api test:integration
 
 ## API
 
+### Authentication
+
+#### Register
+
+```http
+POST /auth/register
+```
+
+```json
+{
+    "email": "user@example.com",
+    "password": "example-password"
+}
+```
+
+A successful registration returns `201 Created` with the short-lived access token and current user identity. A rotating refresh credential is delivered through an `HttpOnly` cookie.
+
+#### Login
+
+```http
+POST /auth/login
+```
+
+Valid credentials return `200 OK` with a short-lived access token and a new refresh credential.
+
+#### Refresh
+
+```http
+POST /auth/refresh
+```
+
+Uses the refresh cookie to rotate the renewable credential and issue a new access token. Reused, revoked, expired, or invalid refresh credentials are rejected with `401 Unauthorized`.
+
+#### Logout
+
+```http
+POST /auth/logout
+```
+
+Revokes the corresponding renewable session and clears the refresh cookie.
+
+A successful logout returns `204 No Content`.
+
+#### Current identity
+
+```http
+GET /auth/me
+Authorization: Bearer <access-token>
+```
+
+Returns the authenticated user identity. Missing, expired, or invalid access tokens are rejected with `401 Unauthorized`.
+
 ### Create a typing session
 
 ```http
@@ -229,6 +315,7 @@ Completes an existing persistent typing session from its serialized typing input
 The server replays the inputs through `@typing-analytics/typing-core`, recalculates the session metrics and persists the validated result.
 
 Client-provided derived metrics are not accepted.
+
 A successful completion returns `200 OK`.
 
 Relevant errors include:
@@ -252,6 +339,6 @@ The CI database uses disposable test-only credentials defined in the workflow. N
 
 Development is currently progressing through v0.3.0 — Identity & Private History.
 
-The repository provides the existing persistent typing-session lifecycle together with dynamic typing targets generated from the approved English word corpus.
+The repository now provides dynamic typing targets together with email/password identity and browser authentication flows for registration, login, refresh-based session recovery, logout, and current identity.
 
-Authentication, ownership, private history, behavioral analytics, multi-layer browser E2E, application containers, and cloud infrastructure remain outside the current scope.
+Authenticated ownership of typing sessions, guest-versus-persistent typing behavior, private history, behavioral analytics, multi-layer browser E2E, application containers, and cloud infrastructure remain outside the currently implemented scope.
