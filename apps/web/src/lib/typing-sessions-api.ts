@@ -10,9 +10,8 @@ export interface CreatedTypingSession {
     readonly typingText: TypingText;
 }
 
-export interface CompletedTypingSession {
+export interface PersistedTypingSessionResult {
     readonly id: string;
-    readonly typingText: TypingText;
     readonly durationMs: number;
     readonly wpm: number;
     readonly rawWpm: number;
@@ -24,6 +23,26 @@ export interface CompletedTypingSession {
     readonly startedAt: string;
     readonly completedAt: string;
 }
+
+export interface CompletedTypingSession extends PersistedTypingSessionResult {
+    readonly typingText: TypingText;
+}
+
+export type TypingSessionHistoryItem = PersistedTypingSessionResult;
+
+export interface TypingSessionHistoryPagination {
+    readonly page: number;
+    readonly pageSize: number;
+    readonly totalItems: number;
+    readonly totalPages: number;
+}
+
+export interface TypingSessionHistoryResponse {
+    readonly items: readonly TypingSessionHistoryItem[];
+    readonly pagination: TypingSessionHistoryPagination;
+}
+
+export type TypingSessionHistoryDetail = CompletedTypingSession;
 
 export class TypingSessionsApiError extends Error {
     constructor(
@@ -41,6 +60,18 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isFiniteNumber(value: unknown): value is number {
     return typeof value === 'number' && Number.isFinite(value);
+}
+
+function isNonNegativeInteger(value: unknown): value is number {
+    return Number.isInteger(value) && typeof value === 'number' && value >= 0;
+}
+
+function isPositiveInteger(value: unknown): value is number {
+    return Number.isInteger(value) && typeof value === 'number' && value > 0;
+}
+
+function isDateTimeString(value: unknown): value is string {
+    return typeof value === 'string' && !Number.isNaN(Date.parse(value));
 }
 
 function isTypingText(value: unknown): value is TypingText {
@@ -62,22 +93,49 @@ function isCreatedTypingSession(value: unknown): value is CreatedTypingSession {
     );
 }
 
-function isCompletedTypingSession(value: unknown): value is CompletedTypingSession {
+function isPersistedTypingSessionResult(value: unknown): value is PersistedTypingSessionResult {
     return (
         isRecord(value) &&
         typeof value['id'] === 'string' &&
         value['id'].length > 0 &&
-        isTypingText(value['typingText']) &&
         isFiniteNumber(value['durationMs']) &&
+        value['durationMs'] >= 0 &&
         isFiniteNumber(value['wpm']) &&
         isFiniteNumber(value['rawWpm']) &&
         isFiniteNumber(value['accuracy']) &&
         isFiniteNumber(value['consistency']) &&
-        isFiniteNumber(value['totalInputs']) &&
-        isFiniteNumber(value['correctInputs']) &&
-        isFiniteNumber(value['incorrectInputs']) &&
-        typeof value['startedAt'] === 'string' &&
-        typeof value['completedAt'] === 'string'
+        isNonNegativeInteger(value['totalInputs']) &&
+        isNonNegativeInteger(value['correctInputs']) &&
+        isNonNegativeInteger(value['incorrectInputs']) &&
+        isDateTimeString(value['startedAt']) &&
+        isDateTimeString(value['completedAt'])
+    );
+}
+
+function isCompletedTypingSession(value: unknown): value is CompletedTypingSession {
+    return (
+        isRecord(value) &&
+        isPersistedTypingSessionResult(value) &&
+        isTypingText(value['typingText'])
+    );
+}
+
+function isTypingSessionHistoryPagination(value: unknown): value is TypingSessionHistoryPagination {
+    return (
+        isRecord(value) &&
+        isPositiveInteger(value['page']) &&
+        isPositiveInteger(value['pageSize']) &&
+        isNonNegativeInteger(value['totalItems']) &&
+        isNonNegativeInteger(value['totalPages'])
+    );
+}
+
+function isTypingSessionHistoryResponse(value: unknown): value is TypingSessionHistoryResponse {
+    return (
+        isRecord(value) &&
+        Array.isArray(value['items']) &&
+        value['items'].every(isPersistedTypingSessionResult) &&
+        isTypingSessionHistoryPagination(value['pagination'])
     );
 }
 
@@ -133,6 +191,7 @@ async function requestJson<T>(
     isExpectedResponse: (value: unknown) => value is T,
 ): Promise<T> {
     const response = await fetch(`${getApiBaseUrl()}${path}`, init);
+
     const body = await readResponseBody(response);
 
     if (!response.ok) {
@@ -177,6 +236,46 @@ export function completeTypingSession(
             body: JSON.stringify({
                 inputs,
             }),
+        },
+        isCompletedTypingSession,
+    );
+}
+
+export function getTypingSessionHistory(
+    accessToken: string,
+    page: number,
+    pageSize: number,
+): Promise<TypingSessionHistoryResponse> {
+    const searchParams = new URLSearchParams({
+        page: String(page),
+        pageSize: String(pageSize),
+    });
+
+    return requestJson(
+        `/typing-sessions?${searchParams.toString()}`,
+        {
+            method: 'GET',
+            headers: {
+                Accept: 'application/json',
+                Authorization: `Bearer ${accessToken}`,
+            },
+        },
+        isTypingSessionHistoryResponse,
+    );
+}
+
+export function getTypingSessionHistoryDetail(
+    accessToken: string,
+    id: string,
+): Promise<TypingSessionHistoryDetail> {
+    return requestJson(
+        `/typing-sessions/${encodeURIComponent(id)}`,
+        {
+            method: 'GET',
+            headers: {
+                Accept: 'application/json',
+                Authorization: `Bearer ${accessToken}`,
+            },
         },
         isCompletedTypingSession,
     );
