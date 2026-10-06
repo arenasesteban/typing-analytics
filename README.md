@@ -2,7 +2,7 @@
 
 Typing Analytics is a web platform for typing practice and behavioral performance analysis.
 
-The current development baseline contains a Next.js web application, a NestJS API, an independent TypeScript typing core, and a reproducible local PostgreSQL database.
+The current development baseline contains a Next.js web application, a NestJS REST API, an independent TypeScript typing core, and a reproducible local PostgreSQL database.
 
 ## Requirements
 
@@ -24,6 +24,8 @@ compose.yaml             Local PostgreSQL infrastructure
 ```
 
 ## Installation
+
+Install workspace dependencies:
 
 ```bash
 pnpm install
@@ -61,18 +63,6 @@ The web application uses `NEXT_PUBLIC_API_BASE_URL` to reach the REST API.
 
 The API uses `WEB_ORIGIN` to allow the configured browser origin.
 
-Authentication configuration additionally requires:
-
-```text
-JWT_ACCESS_SECRET
-JWT_ACCESS_TTL_SECONDS
-REFRESH_TOKEN_TTL_DAYS
-```
-
-`JWT_ACCESS_SECRET` must contain at least 32 bytes and must not be committed with a real deployment secret.
-
-Access tokens are short-lived bearer tokens. Renewable authentication uses a rotating opaque refresh credential delivered through an `HttpOnly` cookie; only its SHA-256 hash is persisted.
-
 Generate Prisma Client:
 
 ```bash
@@ -107,6 +97,10 @@ pnpm db:reset
 
 The reset command deletes the local development database volume.
 
+Persistent typing sessions belong to authenticated users. Legacy anonymous development sessions from the pre-authentication model are not assigned retrospectively to accounts.
+
+The private-history query is backed by a database index aligned with authenticated ownership and reverse-chronological completed-session retrieval.
+
 ## Development
 
 Web application:
@@ -128,6 +122,8 @@ Web: http://localhost:3000
 API: http://localhost:3001
 ```
 
+### Authentication API
+
 The authentication API exposes:
 
 ```text
@@ -138,18 +134,15 @@ POST /auth/logout
 GET  /auth/me
 ```
 
-The web authentication routes are:
+Authentication uses email and password credentials, short-lived access tokens, and rotating refresh credentials.
 
-```text
-/login
-/register
-```
+The reusable refresh credential is delivered through an `HttpOnly` cookie and is not exposed to application JavaScript. Refresh-session state is maintained server-side.
 
-Browser authentication keeps the short-lived access token only in React memory. Session recovery uses the rotating refresh credential stored in the API-managed `HttpOnly` cookie and then loads the current identity through `GET /auth/me`.
+The web application keeps the access token in memory and can reconstruct browser authentication state through the refresh flow.
 
-No password, refresh credential, or reusable authentication secret is persisted in `localStorage` or `sessionStorage`.
+### Typing-session API
 
-The persistent typing-session API exposes:
+The authenticated persistent typing-session API exposes:
 
 ```text
 POST /typing-sessions
@@ -158,9 +151,39 @@ GET  /typing-sessions?page=1&pageSize=20
 GET  /typing-sessions/:id
 ```
 
-Unauthenticated visitors practice locally: the browser generates the typing target through `@typing-analytics/typing-core`, executes the complete typing session locally, and does not create permanent session rows.
+Authenticated users create server-persisted typing sessions owned by their identity.
 
-Authenticated users use the persistent lifecycle. The browser creates an owned server session using its short-lived access token, processes each keystroke locally through `typing-core`, and sends one replayable input batch when the session completes.
+The server derives ownership exclusively from the authenticated access token. Clients do not provide or control a `userId`.
+
+Each new persistent session receives a concrete target generated from the approved English word corpus through `@typing-analytics/typing-core`.
+
+The browser processes keystrokes locally through `typing-core` and sends one replayable input batch when an authenticated session completes. The API replays those inputs independently, recalculates the metrics, and persists the validated result.
+
+Unauthenticated visitors use a fully local practice lifecycle. Their targets are generated through `typing-core`, their results are calculated locally, and no persistent typing-session rows are created.
+
+### Web routes
+
+The public authentication routes are:
+
+```text
+/login
+/register
+```
+
+The authenticated private-history routes are:
+
+```text
+/history
+/history/:id
+```
+
+Both private-history routes are protected by the browser authentication state.
+
+`/history` renders the authenticated user's server-paginated completed-session history.
+
+`/history/:id` displays the concrete typing target, persisted metrics, and timestamps for an accessible completed session.
+
+Missing or inaccessible session details are represented without exposing whether a resource belongs to another account.
 
 ## Database development
 
@@ -176,11 +199,11 @@ Create a development migration after an approved schema change:
 pnpm --filter @typing-analytics/api exec prisma migrate dev --name <migration-name>
 ```
 
-The authenticated-ownership migration removes legacy anonymous `typing_sessions` before introducing the mandatory `user_id` foreign key. Pre-authentication sessions cannot be truthfully assigned to existing accounts and are intentionally not migrated to arbitrary users.
-
-Database indexes required by application queries are versioned through Prisma migrations together with the schema changes that introduce those query patterns.
+Committed migrations are the authoritative schema evolution path and must remain reproducible from an empty database.
 
 ## Validation
+
+Run the general repository validation:
 
 ```bash
 pnpm format:check
@@ -210,69 +233,75 @@ Apply committed migrations:
 pnpm --filter @typing-analytics/api prisma:migrate:test
 ```
 
-Run integration tests:
+Run API integration tests:
 
 ```bash
 pnpm --filter @typing-analytics/api test:integration
 ```
 
+Integration tests exercise the real NestJS application against isolated PostgreSQL and cover persistence, authentication, ownership, authorization, session completion, and private history behavior.
+
 ## API
 
-### Authentication
-
-#### Register
+### Register
 
 ```http
 POST /auth/register
 ```
 
-```json
-{
-    "email": "user@example.com",
-    "password": "example-password"
-}
-```
+Creates a new account from an email address and password.
 
-A successful registration returns `201 Created` with the short-lived access token and current user identity. A rotating refresh credential is delivered through an `HttpOnly` cookie.
+Emails are normalized before persistence.
 
-#### Login
+Passwords are stored only through secure password hashing and are never persisted in plaintext.
+
+Successful registration establishes an authenticated browser session.
+
+Relevant errors include:
+
+- `400 Bad Request` for invalid registration data.
+- `409 Conflict` when the normalized email already exists.
+
+### Login
 
 ```http
 POST /auth/login
 ```
 
-Valid credentials return `200 OK` with a short-lived access token and a new refresh credential.
+Authenticates an existing user from email and password credentials.
 
-#### Refresh
+Successful login returns a short-lived access token and establishes the rotating refresh credential through an `HttpOnly` cookie.
+
+Invalid credentials return a generic authentication failure without disclosing whether a particular email exists.
+
+### Refresh authentication
 
 ```http
 POST /auth/refresh
 ```
 
-Uses the refresh cookie to rotate the renewable credential and issue a new access token.
+Rotates the current refresh credential and returns a new short-lived access token.
 
-Reused, revoked, expired, or invalid refresh credentials are rejected with `401 Unauthorized`.
+Consumed, revoked, expired, or otherwise invalid refresh credentials are rejected.
 
-#### Logout
+### Logout
 
 ```http
 POST /auth/logout
 ```
 
-Revokes the corresponding renewable session and clears the refresh cookie.
+Revokes the current renewable browser session and clears the refresh cookie.
 
-A successful logout returns `204 No Content`.
-
-#### Current identity
+### Current identity
 
 ```http
 GET /auth/me
 Authorization: Bearer <access-token>
 ```
 
-Returns the authenticated user identity.
+Returns the identity represented by a valid access token.
 
-Missing, expired, or invalid access tokens are rejected with `401 Unauthorized`.
+Unauthenticated requests are rejected with `401 Unauthorized`.
 
 ### Create an authenticated typing session
 
@@ -281,11 +310,17 @@ POST /typing-sessions
 Authorization: Bearer <access-token>
 ```
 
-Creates a new persistent typing session owned by the authenticated user using a target generated from the approved English word corpus.
+Creates a new persistent typing session owned by the authenticated user.
 
-Ownership is always derived from the authenticated server context. The request does not accept a client-provided `userId`, session identifier, or target text.
+The API generates the target from the approved English word corpus and persists the concrete generated text in `typing_texts`.
 
-The concrete generated target is persisted in `typing_texts` and associated with the new session.
+Ownership is always derived from authenticated server context.
+
+The request does not accept:
+
+- a client-provided `userId`;
+- a client-generated session identifier;
+- arbitrary client-provided target text.
 
 Successful response:
 
@@ -301,12 +336,12 @@ Successful response:
 
 The endpoint returns `201 Created`.
 
-Target generation runs for every new persistent session creation. Generated targets are not required to be globally unique; if the same concrete text is generated again, the existing `typing_texts` row may be reused.
+Target generation runs for every new session creation. Generated targets are not required to be globally unique; when the same concrete text is generated again, the existing `typing_texts` row may be reused.
 
 Relevant errors include:
 
-- `400 Bad Request` when unexpected request data is provided.
-- `401 Unauthorized` when a valid authenticated identity is not provided.
+- `400 Bad Request` for unexpected request data.
+- `401 Unauthorized` when no valid authenticated identity is provided.
 
 ### Complete an authenticated typing session
 
@@ -316,6 +351,8 @@ Authorization: Bearer <access-token>
 ```
 
 Completes an existing persistent typing session owned by the authenticated user from its serialized typing inputs.
+
+Request body:
 
 ```json
 {
@@ -329,21 +366,19 @@ Completes an existing persistent typing session owned by the authenticated user 
 }
 ```
 
-Only the authenticated owner can complete the persistent session. The server derives ownership from the access token and never from client-provided identity data.
-
 The server replays the inputs through `@typing-analytics/typing-core`, recalculates the session metrics, and persists the validated result.
 
 Client-provided derived metrics are not accepted.
 
-A successful completion returns `200 OK`.
+Ownership is enforced by the server. Changing the session identifier cannot grant access to another user's session.
 
-A session belonging to another user is not addressable through identifier manipulation and is returned as not found.
+A successful completion returns `200 OK`.
 
 Relevant errors include:
 
 - `400 Bad Request` for invalid session data or interactions.
-- `401 Unauthorized` when a valid authenticated identity is not provided.
-- `404 Not Found` when the session does not exist or is not owned by the authenticated user.
+- `401 Unauthorized` when no valid authenticated identity is provided.
+- `404 Not Found` when the session is missing or is not addressable by the authenticated user.
 - `409 Conflict` when the session has already been completed.
 - `413 Payload Too Large` when the input limit is exceeded.
 
@@ -356,9 +391,18 @@ Authorization: Bearer <access-token>
 
 Returns only completed persistent sessions owned by the authenticated user.
 
-Pagination is controlled by the server using positive integer `page` and `pageSize` parameters. The defaults are `page=1` and `pageSize=20`; `pageSize` cannot exceed `100`.
+Pagination is controlled by the server through positive integer `page` and `pageSize` parameters.
 
-Sessions are returned in deterministic reverse-chronological order by completion time, with the session identifier used as the final ordering tie-breaker.
+Defaults:
+
+```text
+page=1
+pageSize=20
+```
+
+`pageSize` cannot exceed `100`.
+
+History is returned in deterministic reverse-chronological order by completion time, with the session identifier used as the final ordering tie-breaker.
 
 Successful response:
 
@@ -390,10 +434,12 @@ Successful response:
 
 Incomplete sessions and sessions belonging to other users are not included.
 
+A valid page beyond the available data returns an empty `items` collection with the requested pagination metadata.
+
 Relevant errors include:
 
 - `400 Bad Request` for invalid pagination parameters.
-- `401 Unauthorized` when a valid authenticated identity is not provided.
+- `401 Unauthorized` when no valid authenticated identity is provided.
 
 ### Get private typing session detail
 
@@ -402,7 +448,7 @@ GET /typing-sessions/:id
 Authorization: Bearer <access-token>
 ```
 
-Returns an owned completed session together with its persisted metrics, timestamps, and the concrete typing target used for that session.
+Returns an owned completed session together with its concrete typing target, persisted metrics, and timestamps.
 
 Successful response:
 
@@ -426,34 +472,36 @@ Successful response:
 }
 ```
 
-The resource is owner-scoped on the server.
+The resource is owner-scoped directly by the server query.
 
-A missing session, an incomplete session, or a completed session owned by another user is returned as `404 Not Found`.
+A missing session, an incomplete session, or a completed session belonging to another user is returned as `404 Not Found`.
 
 Changing the URL identifier cannot expose another user's session.
-
-Relevant errors include:
-
-- `400 Bad Request` when the session identifier is malformed.
-- `401 Unauthorized` when a valid authenticated identity is not provided.
-- `404 Not Found` when the requested completed session is unavailable to the authenticated user.
 
 ## Continuous Integration
 
 GitHub Actions validates pull requests and pushes to `main`.
 
-The general validation job runs formatting checks, linting, typechecking, unit/component tests, and workspace builds.
+The general validation job runs:
+
+- formatting checks;
+- linting;
+- typechecking;
+- unit and component tests;
+- workspace builds.
 
 A separate API/PostgreSQL integration job provisions an ephemeral PostgreSQL instance, applies all committed Prisma migrations from an empty database, and runs the API integration suite against that database.
 
-The CI database uses disposable test-only credentials defined in the workflow. No local environment file, permanent database credential, or application secret is required by CI.
+The CI database uses disposable test-only credentials defined in the workflow.
+
+No local environment file, permanent database credential, or application secret is required by CI.
 
 ## Current scope
 
 Development is currently progressing through v0.3.0 — Identity & Private History.
 
-The repository now provides dynamic typing targets, email/password authentication, browser session recovery, authenticated ownership of persistent typing sessions, and an authenticated owner-scoped API for paginated completed-session history and session detail.
+The repository now provides dynamic typing targets, email/password authentication, browser session recovery, authenticated ownership of persistent typing sessions, an owner-scoped paginated history API, and protected web views for browsing completed sessions and opening their detail.
 
-Authenticated users create and complete server-persisted sessions owned by their identity. Guests continue to practice locally without creating permanent history rows.
+Authenticated users can persist typing tests, browse their completed history, navigate server-provided pages, and inspect the concrete target and persisted metrics of their own sessions. Guests continue to practice locally without creating permanent history rows.
 
-Protected web history views, behavioral analytics, multi-layer browser E2E, application containers, and cloud infrastructure remain outside the currently implemented scope.
+Behavioral analytics, multi-layer browser E2E, application containers, and cloud infrastructure remain outside the currently implemented scope.
