@@ -8,6 +8,11 @@ packages/*/dist/
 # Test output
 coverage/
 
+# Playwright
+apps/web/playwright-report/
+apps/web/test-results/
+apps/web/blob-report/
+
 # TypeScript
 *.tsbuildinfo
 

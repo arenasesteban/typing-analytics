@@ -26,7 +26,8 @@
         "prisma:validate": "prisma validate",
         "prisma:migrate:dev": "prisma migrate dev",
         "prisma:migrate:deploy": "prisma migrate deploy",
-        "prisma:migrate:test": "prisma migrate deploy --config prisma7.integration.config.ts"
+        "prisma:migrate:test": "prisma migrate deploy --config prisma7.integration.config.ts",
+        "prisma:migrate:e2e": "prisma migrate deploy --config prisma7.e2e.config.ts"
     },
     "dependencies": {
         "@nestjs/common": "^12.0.1",
