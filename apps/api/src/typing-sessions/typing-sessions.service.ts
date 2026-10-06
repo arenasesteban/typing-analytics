@@ -2,6 +2,7 @@ import {
     BadRequestException,
     ConflictException,
     Injectable,
+    InternalServerErrorException,
     NotFoundException,
 } from '@nestjs/common';
 import {
@@ -18,11 +19,184 @@ import type {
     CompleteTypingSessionRequest,
     CompletedTypingSessionResponse,
     CreatedTypingSessionResponse,
+    TypingSessionHistoryDetailResponse,
+    TypingSessionHistoryItemResponse,
+    TypingSessionHistoryQuery,
+    TypingSessionHistoryResponse,
 } from './typing-sessions.types.js';
+
+interface PersistedCompletedSession {
+    readonly id: string;
+    readonly durationMs: number | null;
+    readonly wpm: number | null;
+    readonly rawWpm: number | null;
+    readonly accuracy: number | null;
+    readonly consistency: number | null;
+    readonly totalInputs: number | null;
+    readonly correctInputs: number | null;
+    readonly incorrectInputs: number | null;
+    readonly startedAt: Date | null;
+    readonly completedAt: Date | null;
+}
+
+interface PersistedCompletedSessionDetail extends PersistedCompletedSession {
+    readonly typingText: {
+        readonly id: string;
+        readonly text: string;
+    };
+}
+
+function toHistoryItem(session: PersistedCompletedSession): TypingSessionHistoryItemResponse {
+    const {
+        id,
+        durationMs,
+        wpm,
+        rawWpm,
+        accuracy,
+        consistency,
+        totalInputs,
+        correctInputs,
+        incorrectInputs,
+        startedAt,
+        completedAt,
+    } = session;
+
+    if (
+        durationMs === null ||
+        wpm === null ||
+        rawWpm === null ||
+        accuracy === null ||
+        consistency === null ||
+        totalInputs === null ||
+        correctInputs === null ||
+        incorrectInputs === null ||
+        startedAt === null ||
+        completedAt === null
+    ) {
+        throw new InternalServerErrorException(
+            'Completed typing session is missing persisted result data',
+        );
+    }
+
+    return {
+        id,
+        durationMs,
+        wpm,
+        rawWpm,
+        accuracy,
+        consistency,
+        totalInputs,
+        correctInputs,
+        incorrectInputs,
+        startedAt: startedAt.toISOString(),
+        completedAt: completedAt.toISOString(),
+    };
+}
 
 @Injectable()
 export class TypingSessionsService {
     constructor(private readonly prisma: PrismaService) {}
+
+    async history(
+        userId: string,
+        query: TypingSessionHistoryQuery,
+    ): Promise<TypingSessionHistoryResponse> {
+        const skip = (query.page - 1) * query.pageSize;
+
+        const [totalItems, sessions] = await this.prisma.$transaction([
+            this.prisma.typingSession.count({
+                where: {
+                    userId,
+                    completedAt: {
+                        not: null,
+                    },
+                },
+            }),
+            this.prisma.typingSession.findMany({
+                where: {
+                    userId,
+                    completedAt: {
+                        not: null,
+                    },
+                },
+                orderBy: [
+                    {
+                        completedAt: 'desc',
+                    },
+                    {
+                        id: 'desc',
+                    },
+                ],
+                skip,
+                take: query.pageSize,
+                select: {
+                    id: true,
+                    durationMs: true,
+                    wpm: true,
+                    rawWpm: true,
+                    accuracy: true,
+                    consistency: true,
+                    totalInputs: true,
+                    correctInputs: true,
+                    incorrectInputs: true,
+                    startedAt: true,
+                    completedAt: true,
+                },
+            }),
+        ]);
+
+        return {
+            items: sessions.map(toHistoryItem),
+            pagination: {
+                page: query.page,
+                pageSize: query.pageSize,
+                totalItems,
+                totalPages: totalItems === 0 ? 0 : Math.ceil(totalItems / query.pageSize),
+            },
+        };
+    }
+
+    async historyDetail(userId: string, id: string): Promise<TypingSessionHistoryDetailResponse> {
+        const session = await this.prisma.typingSession.findFirst({
+            where: {
+                id,
+                userId,
+                completedAt: {
+                    not: null,
+                },
+            },
+            select: {
+                id: true,
+                durationMs: true,
+                wpm: true,
+                rawWpm: true,
+                accuracy: true,
+                consistency: true,
+                totalInputs: true,
+                correctInputs: true,
+                incorrectInputs: true,
+                startedAt: true,
+                completedAt: true,
+                typingText: {
+                    select: {
+                        id: true,
+                        text: true,
+                    },
+                },
+            },
+        });
+
+        if (session === null) {
+            throw new NotFoundException('Typing session not found');
+        }
+
+        const persistedSession: PersistedCompletedSessionDetail = session;
+
+        return {
+            ...toHistoryItem(persistedSession),
+            typingText: persistedSession.typingText,
+        };
+    }
 
     async create(userId: string): Promise<CreatedTypingSessionResponse> {
         const generatedText = generateTypingText();

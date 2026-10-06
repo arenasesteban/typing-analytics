@@ -2,11 +2,13 @@ import {
     BadRequestException,
     Body,
     Controller,
+    Get,
     HttpCode,
     HttpStatus,
     Param,
     ParseUUIDPipe,
     Post,
+    Query,
     Req,
     UseGuards,
 } from '@nestjs/common';
@@ -14,11 +16,15 @@ import {
 import { AccessTokenGuard } from '../auth/access-token.guard.js';
 import type { AuthenticatedRequest } from '../auth/auth.types.js';
 import { CompleteTypingSessionPipe } from './complete-typing-session.pipe.js';
+import { TypingSessionHistoryQueryPipe } from './typing-session-history-query.pipe.js';
 import { TypingSessionsService } from './typing-sessions.service.js';
 import type {
     CompleteTypingSessionRequest,
     CompletedTypingSessionResponse,
     CreatedTypingSessionResponse,
+    TypingSessionHistoryDetailResponse,
+    TypingSessionHistoryQuery,
+    TypingSessionHistoryResponse,
 } from './typing-sessions.types.js';
 
 function isEmptyObject(value: unknown): boolean {
@@ -34,6 +40,23 @@ function isEmptyObject(value: unknown): boolean {
 @UseGuards(AccessTokenGuard)
 export class TypingSessionsController {
     constructor(private readonly typingSessionsService: TypingSessionsService) {}
+
+    @Get()
+    history(
+        @Req() request: AuthenticatedRequest,
+        @Query(TypingSessionHistoryQueryPipe)
+        query: TypingSessionHistoryQuery,
+    ): Promise<TypingSessionHistoryResponse> {
+        return this.typingSessionsService.history(request.auth.userId, query);
+    }
+
+    @Get(':id')
+    detail(
+        @Req() request: AuthenticatedRequest,
+        @Param('id', new ParseUUIDPipe()) id: string,
+    ): Promise<TypingSessionHistoryDetailResponse> {
+        return this.typingSessionsService.historyDetail(request.auth.userId, id);
+    }
 
     @Post()
     create(

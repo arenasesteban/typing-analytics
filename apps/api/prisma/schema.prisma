@@ -56,5 +56,6 @@ model TypingSession {
   user            User        @relation(fields: [userId], references: [id], onDelete: Cascade)
   typingText      TypingText  @relation(fields: [typingTextId], references: [id], onDelete: Restrict)
 
+  @@index([userId, completedAt, id], map: "typing_sessions_user_history_idx")
   @@map("typing_sessions")
 }
