@@ -45,9 +45,13 @@ jobs:
         runs-on: ubuntu-latest
 
         env:
+            NODE_ENV: test
             DATABASE_URL: postgresql://typing_analytics:typing_analytics_test_ci@localhost:5432/typing_analytics_test?schema=public
             PORT: 3002
             WEB_ORIGIN: http://localhost:3000
+            JWT_ACCESS_SECRET: typing-analytics-ci-only-access-secret-0123456789abcdef
+            JWT_ACCESS_TTL_SECONDS: 900
+            REFRESH_TOKEN_TTL_DAYS: 30
 
         services:
             postgres:
