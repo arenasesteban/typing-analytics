@@ -2,7 +2,28 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { DEFAULT_TYPING_WORD_COUNT } from '@typing-analytics/typing-core';
 import { TypingTest } from './typing-test';
+
+type TestAuthStatus = 'loading' | 'authenticated' | 'unauthenticated' | 'error';
+
+interface TestAuthState {
+    status: TestAuthStatus;
+    accessToken: string | null;
+}
+
+const { authState } = vi.hoisted<{
+    authState: TestAuthState;
+}>(() => ({
+    authState: {
+        status: 'authenticated',
+        accessToken: 'test-access-token',
+    },
+}));
+
+vi.mock('@/auth/use-auth', () => ({
+    useAuth: () => authState,
+}));
 
 const SERVER_TEXT = 'cat';
 
@@ -57,11 +78,14 @@ async function typeAttempt(user: ReturnType<typeof userEvent.setup>, text: strin
 
 beforeEach(() => {
     fetchMock.mockReset();
+    authState.status = 'authenticated';
+    authState.accessToken = 'test-access-token';
     vi.stubGlobal('fetch', fetchMock);
 });
 
 afterEach(() => {
     vi.unstubAllGlobals();
+    vi.restoreAllMocks();
 });
 
 describe('TypingTest persistent session integration', () => {
@@ -99,6 +123,14 @@ describe('TypingTest persistent session integration', () => {
         expect(screen.getByTestId('session-status')).toHaveTextContent('active');
 
         expect(fetchMock).toHaveBeenCalledTimes(1);
+
+        expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
+            method: 'POST',
+            headers: {
+                Accept: 'application/json',
+                Authorization: 'Bearer test-access-token',
+            },
+        });
     });
 
     it('preserves incorrect input and Backspace behavior without remote keystroke requests', async () => {
@@ -147,6 +179,15 @@ describe('TypingTest persistent session integration', () => {
         );
 
         const requestInit = secondCall[1];
+
+        expect(requestInit).toMatchObject({
+            method: 'POST',
+            headers: {
+                Accept: 'application/json',
+                'Content-Type': 'application/json',
+                Authorization: 'Bearer test-access-token',
+            },
+        });
 
         const requestBody = JSON.parse(requestInit?.body as string) as {
             inputs: Array<{
@@ -309,5 +350,67 @@ describe('TypingTest persistent session integration', () => {
         expect(fetchMock).toHaveBeenCalledTimes(3);
 
         expect(fetchMock.mock.calls[2]?.[0]).toBe('http://localhost:3001/typing-sessions');
+    });
+
+    it('keeps guest typing completely local without creating persistent sessions', async () => {
+        authState.status = 'unauthenticated';
+        authState.accessToken = null;
+
+        const randomSpy = vi.spyOn(Math, 'random').mockReturnValue(0);
+
+        const user = userEvent.setup();
+
+        render(<TypingTest />);
+
+        const surface = await screen.findByTestId('typing-surface');
+
+        expect(screen.getByTestId('session-mode')).toHaveTextContent('guest');
+
+        const targetText = screen.getByTestId('typing-text').textContent;
+
+        expect(targetText).not.toBeNull();
+
+        await user.click(surface);
+        await user.keyboard(targetText);
+
+        expect(await screen.findByTestId('typing-results')).toBeInTheDocument();
+
+        expect(fetchMock).not.toHaveBeenCalled();
+
+        expect(randomSpy).toHaveBeenCalledTimes(DEFAULT_TYPING_WORD_COUNT);
+    });
+
+    it('regenerates a local target when a guest restarts without persisting either session', async () => {
+        authState.status = 'unauthenticated';
+        authState.accessToken = null;
+
+        const randomSpy = vi.spyOn(Math, 'random').mockReturnValue(0);
+
+        const user = userEvent.setup();
+
+        render(<TypingTest />);
+
+        const surface = await screen.findByTestId('typing-surface');
+
+        const targetText = screen.getByTestId('typing-text').textContent;
+
+        expect(targetText).not.toBeNull();
+
+        await user.click(surface);
+        await user.keyboard(targetText);
+
+        await screen.findByTestId('typing-results');
+
+        await user.click(
+            screen.getByRole('button', {
+                name: 'Restart test',
+            }),
+        );
+
+        expect(await screen.findByTestId('typing-surface')).toBeInTheDocument();
+
+        expect(randomSpy).toHaveBeenCalledTimes(DEFAULT_TYPING_WORD_COUNT * 2);
+
+        expect(fetchMock).not.toHaveBeenCalled();
     });
 });

@@ -16,6 +16,7 @@ import type {
     CompletedTypingSessionResponse,
     CreatedTypingSessionResponse,
 } from '../src/typing-sessions/typing-sessions.types.js';
+import { authorizationHeader, registerTestUser } from './auth-test-helpers.js';
 
 function buildCompletionInputs(
     targetText: string,
@@ -42,6 +43,7 @@ function buildExpectedSummary(targetText: string, inputs: readonly TypingInput[]
 describe('POST /typing-sessions/:id/complete', () => {
     let app: INestApplication;
     let prisma: PrismaService;
+    let ownerAccessToken: string;
 
     beforeAll(async () => {
         const moduleRef = await Test.createTestingModule({
@@ -57,19 +59,80 @@ describe('POST /typing-sessions/:id/complete', () => {
     beforeEach(async () => {
         await prisma.typingSession.deleteMany();
         await prisma.typingText.deleteMany();
+        await prisma.refreshSession.deleteMany();
+        await prisma.user.deleteMany();
+
+        const owner = await registerTestUser(app, 'owner@example.com');
+
+        ownerAccessToken = owner.accessToken;
     });
 
     afterAll(async () => {
         await prisma.typingSession.deleteMany();
         await prisma.typingText.deleteMany();
+        await prisma.refreshSession.deleteMany();
+        await prisma.user.deleteMany();
         await app.close();
     });
 
+    function postAs(accessToken: string, path: string) {
+        return request(app.getHttpServer())
+            .post(path)
+            .set('Authorization', authorizationHeader(accessToken));
+    }
+
+    function postAsOwner(path: string) {
+        return postAs(ownerAccessToken, path);
+    }
+
     async function createPersistentSession(): Promise<CreatedTypingSessionResponse> {
-        const response = await request(app.getHttpServer()).post('/typing-sessions').expect(201);
+        const response = await postAsOwner('/typing-sessions').expect(201);
 
         return response.body as CreatedTypingSessionResponse;
     }
+
+    it('rejects unauthenticated persistent session completion', async () => {
+        const createdSession = await createPersistentSession();
+
+        const inputs = buildCompletionInputs(createdSession.typingText.text);
+
+        await request(app.getHttpServer())
+            .post(`/typing-sessions/${createdSession.id}/complete`)
+            .send({
+                inputs,
+            })
+            .expect(401);
+
+        const persistedSession = await prisma.typingSession.findUniqueOrThrow({
+            where: {
+                id: createdSession.id,
+            },
+        });
+
+        expect(persistedSession.completedAt).toBeNull();
+    });
+
+    it('rejects completion of a session owned by another user', async () => {
+        const createdSession = await createPersistentSession();
+
+        const inputs = buildCompletionInputs(createdSession.typingText.text);
+
+        const otherUser = await registerTestUser(app, 'other@example.com');
+
+        await postAs(otherUser.accessToken, `/typing-sessions/${createdSession.id}/complete`)
+            .send({
+                inputs,
+            })
+            .expect(404);
+
+        const persistedSession = await prisma.typingSession.findUniqueOrThrow({
+            where: {
+                id: createdSession.id,
+            },
+        });
+
+        expect(persistedSession.completedAt).toBeNull();
+    });
 
     it('replays the persisted target text and stores the server-calculated summary', async () => {
         const createdSession = await createPersistentSession();
@@ -78,8 +141,7 @@ describe('POST /typing-sessions/:id/complete', () => {
 
         const requestStartedAt = Date.now();
 
-        const response = await request(app.getHttpServer())
-            .post(`/typing-sessions/${createdSession.id}/complete`)
+        const response = await postAsOwner(`/typing-sessions/${createdSession.id}/complete`)
             .send({
                 inputs,
             })
@@ -140,8 +202,7 @@ describe('POST /typing-sessions/:id/complete', () => {
     it('returns 404 for an unknown session', async () => {
         const inputs = buildCompletionInputs('unknown');
 
-        await request(app.getHttpServer())
-            .post(`/typing-sessions/${randomUUID()}/complete`)
+        await postAsOwner(`/typing-sessions/${randomUUID()}/complete`)
             .send({
                 inputs,
             })
@@ -152,8 +213,7 @@ describe('POST /typing-sessions/:id/complete', () => {
         const createdSession = await createPersistentSession();
         const inputs = buildCompletionInputs(createdSession.typingText.text);
 
-        await request(app.getHttpServer())
-            .post(`/typing-sessions/${createdSession.id}/complete`)
+        await postAsOwner(`/typing-sessions/${createdSession.id}/complete`)
             .send({
                 inputs,
             })
@@ -165,8 +225,7 @@ describe('POST /typing-sessions/:id/complete', () => {
             },
         });
 
-        await request(app.getHttpServer())
-            .post(`/typing-sessions/${createdSession.id}/complete`)
+        await postAsOwner(`/typing-sessions/${createdSession.id}/complete`)
             .send({
                 inputs,
             })
@@ -186,16 +245,12 @@ describe('POST /typing-sessions/:id/complete', () => {
         const inputs = buildCompletionInputs(createdSession.typingText.text);
 
         const responses = await Promise.all([
-            request(app.getHttpServer())
-                .post(`/typing-sessions/${createdSession.id}/complete`)
-                .send({
-                    inputs,
-                }),
-            request(app.getHttpServer())
-                .post(`/typing-sessions/${createdSession.id}/complete`)
-                .send({
-                    inputs,
-                }),
+            postAsOwner(`/typing-sessions/${createdSession.id}/complete`).send({
+                inputs,
+            }),
+            postAsOwner(`/typing-sessions/${createdSession.id}/complete`).send({
+                inputs,
+            }),
         ]);
 
         const statuses = responses.map((response) => response.status).sort();
@@ -218,8 +273,7 @@ describe('POST /typing-sessions/:id/complete', () => {
     it('rejects malformed completion payloads', async () => {
         const createdSession = await createPersistentSession();
 
-        await request(app.getHttpServer())
-            .post(`/typing-sessions/${createdSession.id}/complete`)
+        await postAsOwner(`/typing-sessions/${createdSession.id}/complete`)
             .send({
                 inputs: 'not-an-array',
             })
@@ -230,8 +284,7 @@ describe('POST /typing-sessions/:id/complete', () => {
         const createdSession = await createPersistentSession();
         const inputs = buildCompletionInputs(createdSession.typingText.text);
 
-        await request(app.getHttpServer())
-            .post(`/typing-sessions/${createdSession.id}/complete`)
+        await postAsOwner(`/typing-sessions/${createdSession.id}/complete`)
             .send({
                 inputs,
                 wpm: 9999,
@@ -251,8 +304,7 @@ describe('POST /typing-sessions/:id/complete', () => {
     it('rejects invalid typing transitions', async () => {
         const createdSession = await createPersistentSession();
 
-        await request(app.getHttpServer())
-            .post(`/typing-sessions/${createdSession.id}/complete`)
+        await postAsOwner(`/typing-sessions/${createdSession.id}/complete`)
             .send({
                 inputs: [
                     {
@@ -267,8 +319,7 @@ describe('POST /typing-sessions/:id/complete', () => {
     it('rejects decreasing input timestamps', async () => {
         const createdSession = await createPersistentSession();
 
-        await request(app.getHttpServer())
-            .post(`/typing-sessions/${createdSession.id}/complete`)
+        await postAsOwner(`/typing-sessions/${createdSession.id}/complete`)
             .send({
                 inputs: [
                     {
@@ -289,8 +340,7 @@ describe('POST /typing-sessions/:id/complete', () => {
     it('rejects an interaction that does not complete the target text', async () => {
         const createdSession = await createPersistentSession();
 
-        await request(app.getHttpServer())
-            .post(`/typing-sessions/${createdSession.id}/complete`)
+        await postAsOwner(`/typing-sessions/${createdSession.id}/complete`)
             .send({
                 inputs: [
                     {
@@ -316,8 +366,7 @@ describe('POST /typing-sessions/:id/complete', () => {
             }),
         );
 
-        await request(app.getHttpServer())
-            .post(`/typing-sessions/${createdSession.id}/complete`)
+        await postAsOwner(`/typing-sessions/${createdSession.id}/complete`)
             .send({
                 inputs,
             })
@@ -325,8 +374,7 @@ describe('POST /typing-sessions/:id/complete', () => {
     });
 
     it('rejects malformed session identifiers', async () => {
-        await request(app.getHttpServer())
-            .post('/typing-sessions/not-a-uuid/complete')
+        await postAsOwner('/typing-sessions/not-a-valid-uuid/complete')
             .send({
                 inputs: [
                     {

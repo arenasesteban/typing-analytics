@@ -71,7 +71,7 @@ REFRESH_TOKEN_TTL_DAYS
 
 `JWT_ACCESS_SECRET` must contain at least 32 bytes and must not be committed with a real deployment secret.
 
-Access tokens are short-lived bearer tokens. Renewable authentication uses a rotating opaque refresh credential delivered through an `HttpOnly` cookie; only its SHA-256 hash is persisted.
+Access tokens are short-lived bearer tokens. Renewable authentication uses a rotating opaque refresh credential delivered through an `HttpOnly` cookie; only its cryptographic hash is persisted.
 
 Generate Prisma Client:
 
@@ -139,7 +139,7 @@ Browser authentication keeps the short-lived access token only in React memory. 
 
 No password, refresh credential, or reusable authentication secret is persisted in `localStorage` or `sessionStorage`.
 
-The authentication API exposes:
+The API exposes:
 
 ```text
 POST /auth/register
@@ -147,18 +147,14 @@ POST /auth/login
 POST /auth/refresh
 POST /auth/logout
 GET  /auth/me
-```
 
-The persistent typing-session API exposes:
-
-```text
 POST /typing-sessions
 POST /typing-sessions/:id/complete
 ```
 
-Each new persistent typing session receives a concrete target generated from the approved English word corpus through `@typing-analytics/typing-core`.
+Unauthenticated visitors practice locally: the browser generates the typing target through `@typing-analytics/typing-core`, executes the complete typing session locally, and does not create permanent session rows.
 
-The browser creates a persistent session before typing, processes each keystroke locally through `typing-core`, and sends one replayable input batch when the local session completes.
+Authenticated users use the persistent lifecycle. The browser creates an owned server session using its short-lived access token, processes each keystroke locally through `typing-core`, and sends one replayable input batch when the session completes.
 
 ## Database development
 
@@ -173,6 +169,8 @@ Create a development migration after an approved schema change:
 ```bash
 pnpm --filter @typing-analytics/api exec prisma migrate dev --name <migration-name>
 ```
+
+The authenticated-ownership migration removes legacy anonymous `typing_sessions` before introducing the mandatory `user_id` foreign key. Pre-authentication sessions cannot be truthfully assigned to existing accounts and are intentionally not migrated to arbitrary users.
 
 ## Validation
 
@@ -220,6 +218,8 @@ pnpm --filter @typing-analytics/api test:integration
 POST /auth/register
 ```
 
+Example request:
+
 ```json
 {
     "email": "user@example.com",
@@ -227,7 +227,9 @@ POST /auth/register
 }
 ```
 
-A successful registration returns `201 Created` with the short-lived access token and current user identity. A rotating refresh credential is delivered through an `HttpOnly` cookie.
+A successful registration returns `201 Created` with the short-lived access token and current user identity.
+
+A rotating refresh credential is delivered through an `HttpOnly` cookie.
 
 #### Login
 
@@ -237,13 +239,17 @@ POST /auth/login
 
 Valid credentials return `200 OK` with a short-lived access token and a new refresh credential.
 
+Invalid credentials are rejected with `401 Unauthorized`.
+
 #### Refresh
 
 ```http
 POST /auth/refresh
 ```
 
-Uses the refresh cookie to rotate the renewable credential and issue a new access token. Reused, revoked, expired, or invalid refresh credentials are rejected with `401 Unauthorized`.
+Uses the refresh cookie to rotate the renewable credential and issue a new access token.
+
+Reused, revoked, expired, or invalid refresh credentials are rejected with `401 Unauthorized`.
 
 #### Logout
 
@@ -262,17 +268,22 @@ GET /auth/me
 Authorization: Bearer <access-token>
 ```
 
-Returns the authenticated user identity. Missing, expired, or invalid access tokens are rejected with `401 Unauthorized`.
+Returns the authenticated user identity.
 
-### Create a typing session
+Missing, expired, or invalid access tokens are rejected with `401 Unauthorized`.
+
+### Create an authenticated typing session
 
 ```http
 POST /typing-sessions
+Authorization: Bearer <access-token>
 ```
 
-Creates a new server-owned persistent typing session using a target generated from the approved English word corpus.
+Creates a new persistent typing session owned by the authenticated user using a target generated from the approved English word corpus.
 
-The concrete generated target is persisted in `typing_texts` and associated with the new session. The request does not accept client-generated session identifiers or arbitrary target text.
+Ownership is always derived from the authenticated server context. The request does not accept a client-provided `userId`, session identifier, or target text.
+
+Unauthenticated creation is rejected with `401 Unauthorized`.
 
 Successful response:
 
@@ -288,17 +299,24 @@ Successful response:
 
 The endpoint returns `201 Created`.
 
-Target generation runs for every new session creation. Generated targets are not required to be globally unique; if the same concrete text is generated again, the existing `typing_texts` row may be reused.
+The concrete generated target is persisted in `typing_texts` and associated with the new session.
 
-Unexpected request data is rejected with `400 Bad Request`.
+Target generation runs for every authenticated session creation. Generated targets are not required to be globally unique; if the same concrete text is generated again, the existing `typing_texts` row may be reused.
 
-### Complete a typing session
+Unexpected request data, including client-controlled ownership data, is rejected with `400 Bad Request`.
+
+### Complete an authenticated typing session
 
 ```http
 POST /typing-sessions/:id/complete
+Authorization: Bearer <access-token>
 ```
 
-Completes an existing persistent typing session from its serialized typing inputs.
+Only the authenticated owner can complete the persistent session. The server derives ownership from the access token and never from client-provided identity data.
+
+A session belonging to another user is not addressable through identifier manipulation and is returned as not found.
+
+Example request:
 
 ```json
 {
@@ -312,7 +330,7 @@ Completes an existing persistent typing session from its serialized typing input
 }
 ```
 
-The server replays the inputs through `@typing-analytics/typing-core`, recalculates the session metrics and persists the validated result.
+The server replays the inputs through `@typing-analytics/typing-core`, recalculates the session metrics, and persists the validated result.
 
 Client-provided derived metrics are not accepted.
 
@@ -321,7 +339,8 @@ A successful completion returns `200 OK`.
 Relevant errors include:
 
 - `400 Bad Request` for invalid session data or interactions.
-- `404 Not Found` when the session does not exist.
+- `401 Unauthorized` when a valid authenticated identity is not provided.
+- `404 Not Found` when the session does not exist or does not belong to the authenticated user.
 - `409 Conflict` when the session has already been completed.
 - `413 Payload Too Large` when the input limit is exceeded.
 
@@ -339,6 +358,8 @@ The CI database uses disposable test-only credentials defined in the workflow. N
 
 Development is currently progressing through v0.3.0 — Identity & Private History.
 
-The repository now provides dynamic typing targets together with email/password identity and browser authentication flows for registration, login, refresh-based session recovery, logout, and current identity.
+The repository now provides dynamic typing targets, email/password authentication, browser session recovery, and authenticated ownership of persistent typing sessions.
 
-Authenticated ownership of typing sessions, guest-versus-persistent typing behavior, private history, behavioral analytics, multi-layer browser E2E, application containers, and cloud infrastructure remain outside the currently implemented scope.
+Authenticated users create and complete server-persisted sessions owned by their identity. Guests continue to practice locally without creating permanent history rows.
+
+Private paginated history, session-detail views, behavioral analytics, multi-layer browser E2E, application containers, and cloud infrastructure remain outside the currently implemented scope.
