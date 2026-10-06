@@ -1,1 +1,5 @@
 export const MAX_COMPLETION_INPUTS = 2048;
+
+export const DEFAULT_HISTORY_PAGE = 1;
+export const DEFAULT_HISTORY_PAGE_SIZE = 20;
+export const MAX_HISTORY_PAGE_SIZE = 100;
