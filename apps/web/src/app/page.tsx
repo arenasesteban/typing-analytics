@@ -1,17 +1,5 @@
-import { AppFooter } from '@/components/layout/app-footer';
-import { AppHeader } from '@/components/layout/app-header';
 import { TypingTest } from '@/components/typing-test/typing-test';
 
 export default function Home() {
-    return (
-        <div className="flex min-h-screen flex-col">
-            <AppHeader />
-
-            <main className="flex flex-1">
-                <TypingTest />
-            </main>
-
-            <AppFooter />
-        </div>
-    );
+    return <TypingTest />;
 }
