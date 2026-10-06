@@ -8,12 +8,13 @@ datasource db {
 }
 
 model User {
-  id           String           @id @default(uuid()) @db.Uuid
-  email        String           @unique @db.VarChar(254)
-  passwordHash String           @map("password_hash") @db.Text
-  createdAt    DateTime         @default(now()) @map("created_at")
-  updatedAt    DateTime         @updatedAt @map("updated_at")
-  sessions     RefreshSession[]
+  id             String           @id @default(uuid()) @db.Uuid
+  email          String           @unique @db.VarChar(254)
+  passwordHash   String           @map("password_hash") @db.Text
+  createdAt      DateTime         @default(now()) @map("created_at")
+  updatedAt      DateTime         @updatedAt @map("updated_at")
+  sessions       RefreshSession[]
+  typingSessions TypingSession[]
 
   @@map("users")
 }
@@ -39,20 +40,21 @@ model TypingText {
 }
 
 model TypingSession {
-  id              String    @id @default(uuid()) @db.Uuid
-  typingTextId    String    @map("typing_text_id") @db.Uuid
-  durationMs      Float?    @map("duration_ms")
+  id              String      @id @default(uuid()) @db.Uuid
+  userId          String      @map("user_id") @db.Uuid
+  typingTextId    String      @map("typing_text_id") @db.Uuid
+  durationMs      Float?      @map("duration_ms")
   wpm             Float?
-  rawWpm          Float?    @map("raw_wpm")
+  rawWpm          Float?      @map("raw_wpm")
   accuracy        Float?
   consistency     Float?
-  totalInputs     Int?      @map("total_inputs")
-  correctInputs   Int?      @map("correct_inputs")
-  incorrectInputs Int?      @map("incorrect_inputs")
-  startedAt       DateTime? @map("started_at")
-  completedAt     DateTime? @map("completed_at")
-
-  typingText TypingText @relation(fields: [typingTextId], references: [id], onDelete: Restrict)
+  totalInputs     Int?        @map("total_inputs")
+  correctInputs   Int?        @map("correct_inputs")
+  incorrectInputs Int?        @map("incorrect_inputs")
+  startedAt       DateTime?   @map("started_at")
+  completedAt     DateTime?   @map("completed_at")
+  user            User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  typingText      TypingText  @relation(fields: [typingTextId], references: [id], onDelete: Restrict)
 
   @@map("typing_sessions")
 }

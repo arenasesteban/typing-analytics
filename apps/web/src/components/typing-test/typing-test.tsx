@@ -32,7 +32,7 @@ function AsyncState({ title, description, role, actionLabel, onAction }: AsyncSt
             aria-live={role === 'status' ? 'polite' : 'assertive'}
             className="max-w-2xl"
         >
-            <p className="text-accent text-xs tracking-[0.16em] uppercase">persistent session</p>
+            <p className="text-accent text-xs tracking-[0.16em] uppercase">typing session</p>
 
             <h2 className="text-foreground mt-3 text-2xl font-semibold">{title}</h2>
 
@@ -58,7 +58,8 @@ function getErrorActionLabel(error: TypingError): string {
 export function TypingTest() {
     const typingSurfaceRef = useRef<HTMLDivElement>(null);
 
-    const { session, status, result, error, handleKeyDown, restartSession } = useTypingSession();
+    const { mode, session, status, result, error, handleKeyDown, restartSession } =
+        useTypingSession();
 
     useEffect(() => {
         if (status === 'ready' && session?.status === 'idle') {
@@ -80,6 +81,10 @@ export function TypingTest() {
                     {status}
                 </span>
 
+                <span data-testid="session-mode" className="sr-only">
+                    {mode ?? 'unresolved'}
+                </span>
+
                 <span data-testid="session-status" className="sr-only">
                     {session?.status ?? 'unavailable'}
                 </span>
@@ -88,7 +93,13 @@ export function TypingTest() {
                     <AsyncState
                         role="status"
                         title="Preparing your typing session"
-                        description="Creating a persistent session and loading its server-assigned text."
+                        description={
+                            mode === 'authenticated'
+                                ? 'Creating an owned persistent session and loading its server-assigned text.'
+                                : mode === 'guest'
+                                  ? 'Generating a local typing test. Guest results are not saved.'
+                                  : 'Checking authentication before preparing your typing test.'
+                        }
                     />
                 ) : null}
 
@@ -115,7 +126,11 @@ export function TypingTest() {
                 ) : null}
 
                 {status === 'completed' && result !== null ? (
-                    <TypingResults summary={result} onRestart={restartSession} />
+                    <TypingResults
+                        summary={result}
+                        persisted={mode === 'authenticated'}
+                        onRestart={restartSession}
+                    />
                 ) : null}
 
                 {status === 'ready' && session !== null ? (

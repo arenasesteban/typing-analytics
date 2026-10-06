@@ -7,6 +7,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { AppModule } from '../src/app.module.js';
 import { PrismaService } from '../src/prisma/prisma.service.js';
 import type { CreatedTypingSessionResponse } from '../src/typing-sessions/typing-sessions.types.js';
+import { authorizationHeader, registerTestUser } from './auth-test-helpers.js';
 
 const EXPECTED_CONTROLLED_TEXT = Array.from(
     { length: DEFAULT_TYPING_WORD_COUNT },
@@ -31,6 +32,8 @@ describe('POST /typing-sessions', () => {
     beforeEach(async () => {
         await prisma.typingSession.deleteMany();
         await prisma.typingText.deleteMany();
+        await prisma.refreshSession.deleteMany();
+        await prisma.user.deleteMany();
     });
 
     afterEach(() => {
@@ -40,13 +43,27 @@ describe('POST /typing-sessions', () => {
     afterAll(async () => {
         await prisma.typingSession.deleteMany();
         await prisma.typingText.deleteMany();
+        await prisma.refreshSession.deleteMany();
+        await prisma.user.deleteMany();
         await app.close();
     });
 
-    it('generates and persists the exact target assigned to a new session', async () => {
+    it('rejects unauthenticated persistent session creation', async () => {
+        await request(app.getHttpServer()).post('/typing-sessions').expect(401);
+
+        expect(await prisma.typingSession.count()).toBe(0);
+    });
+
+    it('generates and persists a session owned by the authenticated user', async () => {
+        const owner = await registerTestUser(app, 'owner@example.com');
+
         const randomSpy = vi.spyOn(Math, 'random').mockReturnValue(0);
 
-        const response = await request(app.getHttpServer()).post('/typing-sessions').expect(201);
+        const response = await request(app.getHttpServer())
+            .post('/typing-sessions')
+            .set('Authorization', authorizationHeader(owner.accessToken))
+            .expect(201);
+
         const body = response.body as CreatedTypingSessionResponse;
 
         expect(randomSpy).toHaveBeenCalledTimes(DEFAULT_TYPING_WORD_COUNT);
@@ -71,6 +88,7 @@ describe('POST /typing-sessions', () => {
 
         expect(persistedSession).toMatchObject({
             id: body.id,
+            userId: owner.user.id,
             typingTextId: body.typingText.id,
             durationMs: null,
             wpm: null,
@@ -89,18 +107,23 @@ describe('POST /typing-sessions', () => {
         });
     });
 
-    it('executes target generation for every new session without requiring global uniqueness', async () => {
+    it('executes target generation for every authenticated persistent session', async () => {
+        const owner = await registerTestUser(app, 'owner@example.com');
+
         const randomSpy = vi.spyOn(Math, 'random').mockReturnValue(0);
 
         const firstResponse = await request(app.getHttpServer())
             .post('/typing-sessions')
+            .set('Authorization', authorizationHeader(owner.accessToken))
             .expect(201);
 
         const secondResponse = await request(app.getHttpServer())
             .post('/typing-sessions')
+            .set('Authorization', authorizationHeader(owner.accessToken))
             .expect(201);
 
         const firstBody = firstResponse.body as CreatedTypingSessionResponse;
+
         const secondBody = secondResponse.body as CreatedTypingSessionResponse;
 
         expect(randomSpy).toHaveBeenCalledTimes(DEFAULT_TYPING_WORD_COUNT * 2);
@@ -108,11 +131,20 @@ describe('POST /typing-sessions', () => {
         expect(firstBody.id).not.toBe(secondBody.id);
 
         expect(firstBody.typingText.text).toBe(EXPECTED_CONTROLLED_TEXT);
+
         expect(secondBody.typingText.text).toBe(EXPECTED_CONTROLLED_TEXT);
 
         expect(firstBody.typingText).toEqual(secondBody.typingText);
 
-        expect(await prisma.typingSession.count()).toBe(2);
+        const sessions = await prisma.typingSession.findMany({
+            orderBy: {
+                id: 'asc',
+            },
+        });
+
+        expect(sessions).toHaveLength(2);
+
+        expect(sessions.every((session) => session.userId === owner.user.id)).toBe(true);
 
         expect(
             await prisma.typingText.count({
@@ -123,12 +155,16 @@ describe('POST /typing-sessions', () => {
         ).toBe(1);
     });
 
-    it('rejects client-controlled persistent session data', async () => {
+    it('rejects client-controlled ownership data', async () => {
+        const owner = await registerTestUser(app, 'owner@example.com');
+
+        const otherUser = await registerTestUser(app, 'other@example.com');
+
         await request(app.getHttpServer())
             .post('/typing-sessions')
+            .set('Authorization', authorizationHeader(owner.accessToken))
             .send({
-                id: 'client-generated-id',
-                text: 'client-controlled text',
+                userId: otherUser.user.id,
             })
             .expect(400);
 

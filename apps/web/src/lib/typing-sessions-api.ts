@@ -146,13 +146,14 @@ async function requestJson<T>(
     return body;
 }
 
-export function createTypingSession(): Promise<CreatedTypingSession> {
+export function createTypingSession(accessToken: string): Promise<CreatedTypingSession> {
     return requestJson(
         '/typing-sessions',
         {
             method: 'POST',
             headers: {
                 Accept: 'application/json',
+                Authorization: `Bearer ${accessToken}`,
             },
         },
         isCreatedTypingSession,
@@ -160,6 +161,7 @@ export function createTypingSession(): Promise<CreatedTypingSession> {
 }
 
 export function completeTypingSession(
+    accessToken: string,
     id: string,
     inputs: readonly TypingInput[],
 ): Promise<CompletedTypingSession> {
@@ -170,6 +172,7 @@ export function completeTypingSession(
             headers: {
                 Accept: 'application/json',
                 'Content-Type': 'application/json',
+                Authorization: `Bearer ${accessToken}`,
             },
             body: JSON.stringify({
                 inputs,

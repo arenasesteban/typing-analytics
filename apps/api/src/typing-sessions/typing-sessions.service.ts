@@ -12,6 +12,7 @@ import {
     type TypingInput,
     type TypingSessionState,
 } from '@typing-analytics/typing-core';
+
 import { PrismaService } from '../prisma/prisma.service.js';
 import type {
     CompleteTypingSessionRequest,
@@ -23,7 +24,7 @@ import type {
 export class TypingSessionsService {
     constructor(private readonly prisma: PrismaService) {}
 
-    async create(): Promise<CreatedTypingSessionResponse> {
+    async create(userId: string): Promise<CreatedTypingSessionResponse> {
         const generatedText = generateTypingText();
 
         const typingText = await this.prisma.typingText.upsert({
@@ -42,6 +43,7 @@ export class TypingSessionsService {
 
         return this.prisma.typingSession.create({
             data: {
+                userId,
                 typingTextId: typingText.id,
             },
             select: {
@@ -57,12 +59,14 @@ export class TypingSessionsService {
     }
 
     async complete(
+        userId: string,
         id: string,
         request: CompleteTypingSessionRequest,
     ): Promise<CompletedTypingSessionResponse> {
-        const persistedSession = await this.prisma.typingSession.findUnique({
+        const persistedSession = await this.prisma.typingSession.findFirst({
             where: {
                 id,
+                userId,
             },
             select: {
                 id: true,
@@ -100,6 +104,7 @@ export class TypingSessionsService {
         const completion = await this.prisma.typingSession.updateMany({
             where: {
                 id,
+                userId,
                 completedAt: null,
             },
             data: {

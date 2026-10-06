@@ -7,7 +7,12 @@ import {
     Param,
     ParseUUIDPipe,
     Post,
+    Req,
+    UseGuards,
 } from '@nestjs/common';
+
+import { AccessTokenGuard } from '../auth/access-token.guard.js';
+import type { AuthenticatedRequest } from '../auth/auth.types.js';
 import { CompleteTypingSessionPipe } from './complete-typing-session.pipe.js';
 import { TypingSessionsService } from './typing-sessions.service.js';
 import type {
@@ -26,24 +31,30 @@ function isEmptyObject(value: unknown): boolean {
 }
 
 @Controller('typing-sessions')
+@UseGuards(AccessTokenGuard)
 export class TypingSessionsController {
     constructor(private readonly typingSessionsService: TypingSessionsService) {}
 
     @Post()
-    create(@Body() body: unknown): Promise<CreatedTypingSessionResponse> {
+    create(
+        @Req() request: AuthenticatedRequest,
+        @Body() body: unknown,
+    ): Promise<CreatedTypingSessionResponse> {
         if (body !== undefined && !isEmptyObject(body)) {
             throw new BadRequestException('Typing session creation does not accept request data');
         }
 
-        return this.typingSessionsService.create();
+        return this.typingSessionsService.create(request.auth.userId);
     }
 
     @Post(':id/complete')
     @HttpCode(HttpStatus.OK)
     complete(
+        @Req() request: AuthenticatedRequest,
         @Param('id', new ParseUUIDPipe()) id: string,
-        @Body(CompleteTypingSessionPipe) request: CompleteTypingSessionRequest,
+        @Body(CompleteTypingSessionPipe)
+        completionRequest: CompleteTypingSessionRequest,
     ): Promise<CompletedTypingSessionResponse> {
-        return this.typingSessionsService.complete(id, request);
+        return this.typingSessionsService.complete(request.auth.userId, id, completionRequest);
     }
 }

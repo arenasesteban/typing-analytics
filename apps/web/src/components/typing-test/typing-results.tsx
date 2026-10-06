@@ -21,6 +21,7 @@ export interface TypingResultSummary {
 
 interface TypingResultsProps {
     readonly summary: TypingResultSummary;
+    readonly persisted: boolean;
     readonly onRestart: () => void;
 }
 
@@ -59,7 +60,7 @@ function ResultMetric({ label, value, testId, icon: MetricIcon }: ResultMetricPr
     );
 }
 
-export function TypingResults({ summary, onRestart }: TypingResultsProps) {
+export function TypingResults({ summary, persisted, onRestart }: TypingResultsProps) {
     return (
         <section
             data-testid="typing-results"
@@ -70,7 +71,9 @@ export function TypingResults({ summary, onRestart }: TypingResultsProps) {
                 <div className="text-accent-strong flex items-center gap-2">
                     <IconCircleCheck size={17} stroke={1.8} aria-hidden="true" />
 
-                    <p className="text-xs tracking-[0.16em] uppercase">session saved</p>
+                    <p className="text-xs tracking-[0.16em] uppercase">
+                        {persisted ? 'session saved' : 'local result'}
+                    </p>
                 </div>
 
                 <h2
