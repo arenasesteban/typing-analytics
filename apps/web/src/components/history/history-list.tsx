@@ -132,7 +132,7 @@ export function HistoryList() {
                     role="status"
                     aria-live="polite"
                     data-testid="history-loading"
-                    className="mx-auto w-full max-w-5xl px-6 py-16 lg:px-10"
+                    className="mx-auto w-full max-w-6xl px-6 py-16 lg:px-10"
                 >
                     <p className="text-accent text-xs tracking-[0.16em] uppercase">history</p>
 
@@ -214,7 +214,7 @@ export function HistoryList() {
 
     return (
         <section className="flex w-full flex-1">
-            <div className="mx-auto w-full max-w-5xl px-6 py-12 lg:px-10 lg:py-16">
+            <div className="mx-auto w-full max-w-6xl px-6 py-12 lg:px-10 lg:py-16">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                     <div>
                         <p className="text-accent text-xs tracking-[0.16em] uppercase">history</p>
