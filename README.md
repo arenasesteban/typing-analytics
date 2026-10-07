@@ -1,75 +1,114 @@
 # Typing Analytics
 
-Typing Analytics is a web platform for typing practice and behavioral performance analysis.
+Typing Analytics is a full-stack web application for typing practice, persistent session history, and the progressive analysis of typing performance.
 
-The current development baseline contains a Next.js web application, a NestJS REST API, an independent TypeScript typing core, and a reproducible local PostgreSQL database.
+The project is built as a reproducible TypeScript monorepo with a framework-independent typing domain, a Next.js frontend, a NestJS REST API, PostgreSQL persistence, and automated validation across unit, component, integration, and end-to-end testing.
 
-## Requirements
+## Features
 
-- Node.js 24.21.0
-- pnpm 12.6.0
-- Docker with Docker Compose
+- Dynamic typing targets generated from an approved English word corpus.
+- Local typing practice for unauthenticated visitors.
+- Email and password authentication.
+- Short-lived access tokens with rotating refresh sessions.
+- Persistent typing sessions owned by authenticated users.
+- Server-side validation of completed typing sessions.
+- Private paginated session history.
+- Private session detail with the concrete target and persisted metrics.
+- Automated unit, component, API integration, and full-stack browser testing.
+
+## Architecture
+
+```text
+                         ┌──────────────────────┐
+                         │    Next.js / React   │
+                         │       Web App        │
+                         └──────────┬───────────┘
+                                    │
+                                    │ REST
+                                    ▼
+┌──────────────────────┐   ┌──────────────────────┐
+│     typing-core      │◄──│     NestJS API       │
+│                      │   │                      │
+│ typing lifecycle     │   │ auth                 │
+│ target generation    │   │ ownership            │
+│ metrics              │   │ persistence          │
+└──────────┬───────────┘   └───────────┬──────────┘
+           ▲                           │
+           │                           ▼
+           │                  ┌──────────────────────┐
+           └──────────────────│     PostgreSQL       │
+                              └──────────────────────┘
+```
+
+`@typing-analytics/typing-core` contains the framework-independent typing domain and is shared by the browser and API.
+
+The browser handles the interactive typing lifecycle locally. For authenticated sessions, the API independently replays the submitted inputs, recalculates the result, and persists only server-validated session data.
+
+## Tech stack
+
+| Area                     | Technology                                    |
+| ------------------------ | --------------------------------------------- |
+| Frontend                 | Next.js, React, TypeScript, Tailwind CSS      |
+| Backend                  | NestJS, TypeScript                            |
+| Domain                   | Framework-independent TypeScript package      |
+| Database                 | PostgreSQL                                    |
+| ORM                      | Prisma                                        |
+| Authentication           | JWT access tokens + rotating refresh sessions |
+| Unit / Component testing | Vitest, Testing Library                       |
+| API integration testing  | Vitest, Supertest, PostgreSQL                 |
+| End-to-end testing       | Playwright                                    |
+| Local infrastructure     | Docker Compose                                |
+| CI                       | GitHub Actions                                |
+| Package management       | pnpm workspaces                               |
 
 ## Repository structure
 
 ```text
-apps/
-├── web/                 Next.js application
-└── api/                 NestJS REST API
-
-packages/
-└── typing-core/         Framework-independent TypeScript domain package
-
-compose.yaml             Local PostgreSQL infrastructure
+.
+├── apps/
+│   ├── api/                  # NestJS REST API
+│   └── web/                  # Next.js application and Playwright E2E
+│
+├── packages/
+│   └── typing-core/          # Shared typing domain
+│
+├── .github/
+│   └── workflows/            # Continuous Integration
+│
+├── compose.yaml              # Local PostgreSQL environments
+├── package.json
+└── pnpm-workspace.yaml
 ```
 
-## Installation
+## Requirements
 
-Install workspace dependencies:
+- Node.js `>=24.21.0 <25`
+- pnpm `12.6.0`
+- Docker with Docker Compose
+
+## Getting started
+
+Install the workspace dependencies:
 
 ```bash
 pnpm install
 ```
 
-Create the local API environment file from the provided example.
+Create the local environment files.
 
 PowerShell:
 
 ```powershell
 Copy-Item apps/api/.env.example apps/api/.env
-```
-
-Unix-like shells:
-
-```bash
-cp apps/api/.env.example apps/api/.env
-```
-
-Create the local web environment file from the provided example.
-
-PowerShell:
-
-```powershell
 Copy-Item apps/web/.env.example apps/web/.env.local
 ```
 
 Unix-like shells:
 
 ```bash
+cp apps/api/.env.example apps/api/.env
 cp apps/web/.env.example apps/web/.env.local
 ```
-
-The web application uses `NEXT_PUBLIC_API_BASE_URL` to reach the REST API.
-
-The API uses `WEB_ORIGIN` to allow the configured browser origin.
-
-Generate Prisma Client:
-
-```bash
-pnpm db:generate
-```
-
-## PostgreSQL
 
 Start PostgreSQL:
 
@@ -77,117 +116,200 @@ Start PostgreSQL:
 pnpm db:up
 ```
 
-Stop PostgreSQL:
+Generate Prisma Client and apply the committed migrations:
 
 ```bash
-pnpm db:down
-```
-
-Apply committed migrations:
-
-```bash
+pnpm db:generate
 pnpm db:migrate:deploy
 ```
 
-Reset the local PostgreSQL volume:
-
-```bash
-pnpm db:reset
-```
-
-The reset command deletes the local development database volume.
-
-Persistent typing sessions belong to authenticated users. Legacy anonymous development sessions from the pre-authentication model are not assigned retrospectively to accounts.
-
-The private-history query is backed by a database index aligned with authenticated ownership and reverse-chronological completed-session retrieval.
-
-## Development
-
-Web application:
-
-```bash
-pnpm dev:web
-```
-
-API:
+Start the API:
 
 ```bash
 pnpm dev:api
 ```
 
-The default local ports are:
+Start the web application in another terminal:
 
-```text
-Web: http://localhost:3000
-API: http://localhost:3001
+```bash
+pnpm dev:web
 ```
 
-### Authentication API
-
-The authentication API exposes:
+The default local services are:
 
 ```text
-POST /auth/register
-POST /auth/login
-POST /auth/refresh
-POST /auth/logout
-GET  /auth/me
+Web    http://localhost:3000
+API    http://localhost:3001
+DB     localhost:5433
 ```
 
-Authentication uses email and password credentials, short-lived access tokens, and rotating refresh credentials.
+## Authentication and persistence model
 
-The reusable refresh credential is delivered through an `HttpOnly` cookie and is not exposed to application JavaScript. Refresh-session state is maintained server-side.
-
-The web application keeps the access token in memory and can reconstruct browser authentication state through the refresh flow.
-
-### Typing-session API
-
-The authenticated persistent typing-session API exposes:
+Authentication uses:
 
 ```text
-POST /typing-sessions
-POST /typing-sessions/:id/complete
-GET  /typing-sessions?page=1&pageSize=20
-GET  /typing-sessions/:id
+email + password
+        ↓
+short-lived access token
+        +
+rotating refresh credential
+        ↓
+HttpOnly cookie
+        +
+server-side refresh session
 ```
 
-Authenticated users create server-persisted typing sessions owned by their identity.
+The access token remains in browser memory. The reusable refresh credential is kept outside application JavaScript and can be used to reconstruct the authenticated browser session.
 
-The server derives ownership exclusively from the authenticated access token. Clients do not provide or control a `userId`.
+Persistent typing sessions always belong to an authenticated user. Ownership is derived by the server from the authenticated identity and cannot be selected by the client.
 
-Each new persistent session receives a concrete target generated from the approved English word corpus through `@typing-analytics/typing-core`.
+Guests can still use the typing application, but their sessions remain local and do not create permanent history.
 
-The browser processes keystrokes locally through `typing-core` and sends one replayable input batch when an authenticated session completes. The API replays those inputs independently, recalculates the metrics, and persists the validated result.
+## Application routes
 
-Unauthenticated visitors use a fully local practice lifecycle. Their targets are generated through `typing-core`, their results are calculated locally, and no persistent typing-session rows are created.
-
-### Web routes
-
-The public authentication routes are:
+Public routes:
 
 ```text
+/
 /login
 /register
 ```
 
-The authenticated private-history routes are:
+Authenticated routes:
 
 ```text
 /history
 /history/:id
 ```
 
-Both private-history routes are protected by the browser authentication state.
+`/history` provides the authenticated user's completed sessions using server-controlled pagination.
 
-`/history` renders the authenticated user's server-paginated completed-session history.
+`/history/:id` displays the concrete typing target, metrics, input counts, and timestamps stored for an accessible completed session.
 
-`/history/:id` displays the concrete typing target, persisted metrics, and timestamps for an accessible completed session.
+## API overview
 
-Missing or inaccessible session details are represented without exposing whether a resource belongs to another account.
+### Authentication
+
+| Method | Route            | Purpose                                                  |
+| ------ | ---------------- | -------------------------------------------------------- |
+| `POST` | `/auth/register` | Create an account                                        |
+| `POST` | `/auth/login`    | Authenticate                                             |
+| `POST` | `/auth/refresh`  | Rotate the refresh session and obtain a new access token |
+| `POST` | `/auth/logout`   | Revoke the current refresh session                       |
+| `GET`  | `/auth/me`       | Retrieve the current authenticated identity              |
+
+### Typing sessions
+
+| Method | Route                                 | Purpose                                   |
+| ------ | ------------------------------------- | ----------------------------------------- |
+| `POST` | `/typing-sessions`                    | Create an owned persistent typing session |
+| `POST` | `/typing-sessions/:id/complete`       | Validate and persist a completed session  |
+| `GET`  | `/typing-sessions?page=1&pageSize=20` | List private completed-session history    |
+| `GET`  | `/typing-sessions/:id`                | Retrieve private session detail           |
+
+Persistent typing-session endpoints require an authenticated identity.
+
+## Validation
+
+Run the standard repository gates from the project root:
+
+```bash
+pnpm format:check
+pnpm lint
+pnpm typecheck
+pnpm test
+pnpm build
+```
+
+The test suite is intentionally split by responsibility instead of using browser E2E for every behavior.
+
+### API / PostgreSQL integration
+
+Create the local integration-test environment file.
+
+PowerShell:
+
+```powershell
+Copy-Item apps/api/.env.test.example apps/api/.env.test.local
+```
+
+Unix-like shells:
+
+```bash
+cp apps/api/.env.test.example apps/api/.env.test.local
+```
+
+Start the isolated PostgreSQL service:
+
+```bash
+docker compose --profile test up -d postgres-test
+```
+
+Apply the committed migrations:
+
+```bash
+pnpm --filter @typing-analytics/api prisma:migrate:test
+```
+
+Run the integration suite:
+
+```bash
+pnpm --filter @typing-analytics/api test:integration
+```
+
+These tests exercise the real NestJS application against isolated PostgreSQL and cover persistence, authentication, ownership, authorization, completion, and private-history behavior.
+
+### Authenticated full-stack E2E
+
+The first multi-layer E2E journey uses Playwright with a dedicated PostgreSQL environment.
+
+Install Chromium once:
+
+```bash
+pnpm --filter @typing-analytics/web exec playwright install chromium
+```
+
+Run the complete E2E procedure:
+
+```bash
+pnpm test:e2e
+```
+
+The command recreates the isolated E2E database, applies the committed Prisma migrations, starts the real NestJS API and Next.js application, and executes the Playwright suite in Chromium.
+
+The journey verifies:
+
+```text
+register
+→ logout
+→ login
+→ generated typing test
+→ complete and persist
+→ private history
+→ session detail
+```
+
+The test uses the real target returned by persistent-session creation, types it through the browser, and verifies that the resulting session appears in private history with the same concrete target.
+
+No pre-existing user or session data is required.
+
+Run the journey with a visible browser:
+
+```bash
+pnpm test:e2e:headed
+```
+
+Remove the isolated E2E database when desired:
+
+```bash
+pnpm e2e:db:down
+```
 
 ## Database development
 
-Validate the Prisma schema:
+Prisma migrations are the authoritative database-evolution mechanism.
+
+Validate the schema:
 
 ```bash
 pnpm --filter @typing-analytics/api prisma:validate
@@ -199,309 +321,60 @@ Create a development migration after an approved schema change:
 pnpm --filter @typing-analytics/api exec prisma migrate dev --name <migration-name>
 ```
 
-Committed migrations are the authoritative schema evolution path and must remain reproducible from an empty database.
-
-## Validation
-
-Run the general repository validation:
+Reset the local development database when necessary:
 
 ```bash
-pnpm format:check
-pnpm lint
-pnpm typecheck
-pnpm test
-pnpm build
+pnpm db:reset
 ```
 
-### API/PostgreSQL integration tests
-
-Create the local integration environment file:
-
-```powershell
-Copy-Item apps/api/.env.test.example apps/api/.env.test.local
-```
-
-Start the isolated PostgreSQL test service:
-
-```bash
-docker compose --profile test up -d postgres-test
-```
-
-Apply committed migrations:
-
-```bash
-pnpm --filter @typing-analytics/api prisma:migrate:test
-```
-
-Run API integration tests:
-
-```bash
-pnpm --filter @typing-analytics/api test:integration
-```
-
-Integration tests exercise the real NestJS application against isolated PostgreSQL and cover persistence, authentication, ownership, authorization, session completion, and private history behavior.
-
-## API
-
-### Register
-
-```http
-POST /auth/register
-```
-
-Creates a new account from an email address and password.
-
-Emails are normalized before persistence.
-
-Passwords are stored only through secure password hashing and are never persisted in plaintext.
-
-Successful registration establishes an authenticated browser session.
-
-Relevant errors include:
-
-- `400 Bad Request` for invalid registration data.
-- `409 Conflict` when the normalized email already exists.
-
-### Login
-
-```http
-POST /auth/login
-```
-
-Authenticates an existing user from email and password credentials.
-
-Successful login returns a short-lived access token and establishes the rotating refresh credential through an `HttpOnly` cookie.
-
-Invalid credentials return a generic authentication failure without disclosing whether a particular email exists.
-
-### Refresh authentication
-
-```http
-POST /auth/refresh
-```
-
-Rotates the current refresh credential and returns a new short-lived access token.
-
-Consumed, revoked, expired, or otherwise invalid refresh credentials are rejected.
-
-### Logout
-
-```http
-POST /auth/logout
-```
-
-Revokes the current renewable browser session and clears the refresh cookie.
-
-### Current identity
-
-```http
-GET /auth/me
-Authorization: Bearer <access-token>
-```
-
-Returns the identity represented by a valid access token.
-
-Unauthenticated requests are rejected with `401 Unauthorized`.
-
-### Create an authenticated typing session
-
-```http
-POST /typing-sessions
-Authorization: Bearer <access-token>
-```
-
-Creates a new persistent typing session owned by the authenticated user.
-
-The API generates the target from the approved English word corpus and persists the concrete generated text in `typing_texts`.
-
-Ownership is always derived from authenticated server context.
-
-The request does not accept:
-
-- a client-provided `userId`;
-- a client-generated session identifier;
-- arbitrary client-provided target text.
-
-Successful response:
-
-```json
-{
-    "id": "<server-generated-session-id>",
-    "typingText": {
-        "id": "<persisted-text-id>",
-        "text": "<target-text>"
-    }
-}
-```
-
-The endpoint returns `201 Created`.
-
-Target generation runs for every new session creation. Generated targets are not required to be globally unique; when the same concrete text is generated again, the existing `typing_texts` row may be reused.
-
-Relevant errors include:
-
-- `400 Bad Request` for unexpected request data.
-- `401 Unauthorized` when no valid authenticated identity is provided.
-
-### Complete an authenticated typing session
-
-```http
-POST /typing-sessions/:id/complete
-Authorization: Bearer <access-token>
-```
-
-Completes an existing persistent typing session owned by the authenticated user from its serialized typing inputs.
-
-Request body:
-
-```json
-{
-    "inputs": [
-        {
-            "type": "insert",
-            "value": "t",
-            "timestampMs": 1000
-        }
-    ]
-}
-```
-
-The server replays the inputs through `@typing-analytics/typing-core`, recalculates the session metrics, and persists the validated result.
-
-Client-provided derived metrics are not accepted.
-
-Ownership is enforced by the server. Changing the session identifier cannot grant access to another user's session.
-
-A successful completion returns `200 OK`.
-
-Relevant errors include:
-
-- `400 Bad Request` for invalid session data or interactions.
-- `401 Unauthorized` when no valid authenticated identity is provided.
-- `404 Not Found` when the session is missing or is not addressable by the authenticated user.
-- `409 Conflict` when the session has already been completed.
-- `413 Payload Too Large` when the input limit is exceeded.
-
-### List private typing session history
-
-```http
-GET /typing-sessions?page=1&pageSize=20
-Authorization: Bearer <access-token>
-```
-
-Returns only completed persistent sessions owned by the authenticated user.
-
-Pagination is controlled by the server through positive integer `page` and `pageSize` parameters.
-
-Defaults:
-
-```text
-page=1
-pageSize=20
-```
-
-`pageSize` cannot exceed `100`.
-
-History is returned in deterministic reverse-chronological order by completion time, with the session identifier used as the final ordering tie-breaker.
-
-Successful response:
-
-```json
-{
-    "items": [
-        {
-            "id": "<session-id>",
-            "durationMs": 60000,
-            "wpm": 50,
-            "rawWpm": 55,
-            "accuracy": 95,
-            "consistency": 90,
-            "totalInputs": 100,
-            "correctInputs": 95,
-            "incorrectInputs": 5,
-            "startedAt": "2026-10-05T17:59:00.000Z",
-            "completedAt": "2026-10-05T18:00:00.000Z"
-        }
-    ],
-    "pagination": {
-        "page": 1,
-        "pageSize": 20,
-        "totalItems": 1,
-        "totalPages": 1
-    }
-}
-```
-
-Incomplete sessions and sessions belonging to other users are not included.
-
-A valid page beyond the available data returns an empty `items` collection with the requested pagination metadata.
-
-Relevant errors include:
-
-- `400 Bad Request` for invalid pagination parameters.
-- `401 Unauthorized` when no valid authenticated identity is provided.
-
-### Get private typing session detail
-
-```http
-GET /typing-sessions/:id
-Authorization: Bearer <access-token>
-```
-
-Returns an owned completed session together with its concrete typing target, persisted metrics, and timestamps.
-
-Successful response:
-
-```json
-{
-    "id": "<session-id>",
-    "typingText": {
-        "id": "<typing-text-id>",
-        "text": "<concrete-target-text>"
-    },
-    "durationMs": 60000,
-    "wpm": 50,
-    "rawWpm": 55,
-    "accuracy": 95,
-    "consistency": 90,
-    "totalInputs": 100,
-    "correctInputs": 95,
-    "incorrectInputs": 5,
-    "startedAt": "2026-10-05T17:59:00.000Z",
-    "completedAt": "2026-10-05T18:00:00.000Z"
-}
-```
-
-The resource is owner-scoped directly by the server query.
-
-A missing session, an incomplete session, or a completed session belonging to another user is returned as `404 Not Found`.
-
-Changing the URL identifier cannot expose another user's session.
+> `pnpm db:reset` removes the local PostgreSQL development volume.
 
 ## Continuous Integration
 
 GitHub Actions validates pull requests and pushes to `main`.
 
-The general validation job runs:
+The pipeline contains three complementary gates:
 
-- formatting checks;
-- linting;
-- typechecking;
-- unit and component tests;
-- workspace builds.
+```text
+Validate
+├── formatting
+├── lint
+├── typecheck
+├── unit / component tests
+└── build
 
-A separate API/PostgreSQL integration job provisions an ephemeral PostgreSQL instance, applies all committed Prisma migrations from an empty database, and runs the API integration suite against that database.
+API / PostgreSQL Integration
+├── ephemeral PostgreSQL
+├── committed migrations
+└── NestJS integration tests
 
-The CI database uses disposable test-only credentials defined in the workflow.
+Authenticated Full-Stack E2E
+├── isolated PostgreSQL
+├── committed migrations
+├── NestJS API
+├── Next.js application
+└── Chromium / Playwright
+```
 
-No local environment file, permanent database credential, or application secret is required by CI.
+The full-stack E2E job uses the same `pnpm test:e2e` entry point available for local development.
 
-## Current scope
+## Project status
 
-Development is currently progressing through v0.3.0 — Identity & Private History.
+Current development milestone:
 
-The repository now provides dynamic typing targets, email/password authentication, browser session recovery, authenticated ownership of persistent typing sessions, an owner-scoped paginated history API, and protected web views for browsing completed sessions and opening their detail.
+**v0.3.0 — Identity & Private History**
 
-Authenticated users can persist typing tests, browse their completed history, navigate server-provided pages, and inspect the concrete target and persisted metrics of their own sessions. Guests continue to practice locally without creating permanent history rows.
+At this stage the project includes:
 
-Behavioral analytics, multi-layer browser E2E, application containers, and cloud infrastructure remain outside the currently implemented scope.
+- dynamic typing-target generation;
+- local guest practice;
+- email/password identity and secure browser authentication;
+- authenticated persistent sessions;
+- server-enforced session ownership;
+- private paginated history;
+- private session detail;
+- full-stack authenticated E2E validation across Next.js, NestJS, and PostgreSQL.
+
+The project is intentionally developed through incremental vertical slices. Functionality and infrastructure are introduced when a real product capability requires them rather than being added speculatively.
+
+Behavioral event analytics, richer historical analysis, application containerization, and cloud infrastructure remain outside the currently implemented scope.

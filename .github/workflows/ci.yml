@@ -84,3 +84,38 @@ jobs:
 
             - name: Run API integration tests
               run: pnpm --filter @typing-analytics/api test:integration
+
+    e2e:
+        name: Authenticated Full-Stack E2E
+        runs-on: ubuntu-latest
+        timeout-minutes: 20
+        needs:
+            - validate
+            - api-integration
+
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v7
+
+            - name: Setup pnpm and Node.js
+              uses: pnpm/setup@v3
+              with:
+                  runtime: node@24.21.0
+                  cache: true
+                  require-lockfile: true
+
+            - name: Install Chromium
+              run: pnpm --filter @typing-analytics/web exec playwright install --with-deps chromium
+
+            - name: Run authenticated full-stack E2E
+              run: pnpm test:e2e
+              env:
+                  DEBUG: pw:webserver
+
+            - name: Upload Playwright report
+              if: ${{ !cancelled() }}
+              uses: actions/upload-artifact@v5
+              with:
+                  name: playwright-report
+                  path: apps/web/playwright-report/
+                  retention-days: 14

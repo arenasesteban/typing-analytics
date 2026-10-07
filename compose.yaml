@@ -36,5 +36,24 @@ services:
             timeout: 5s
             retries: 10
 
+    postgres-e2e:
+        image: postgres:18.6-alpine
+        profiles:
+            - e2e
+        shm_size: 128mb
+        environment:
+            POSTGRES_DB: typing_analytics_e2e
+            POSTGRES_USER: typing_analytics
+            POSTGRES_PASSWORD: typing_analytics_e2e_local
+        ports:
+            - '127.0.0.1:5435:5432'
+        tmpfs:
+            - /var/lib/postgresql
+        healthcheck:
+            test: ['CMD-SHELL', 'pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB']
+            interval: 5s
+            timeout: 5s
+            retries: 10
+
 volumes:
     postgres_data:
