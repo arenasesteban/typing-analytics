@@ -178,13 +178,10 @@ Public routes:
 Authenticated routes:
 
 ```text
+/dashboard
 /history
 /history/:id
 ```
-
-`/history` provides the authenticated user's completed sessions using server-controlled pagination.
-
-`/history/:id` displays the concrete typing target, metrics, input counts, and timestamps stored for an accessible completed session.
 
 ## API overview
 
@@ -207,7 +204,15 @@ Authenticated routes:
 | `GET`  | `/typing-sessions?page=1&pageSize=20` | List private completed-session history    |
 | `GET`  | `/typing-sessions/:id`                | Retrieve private session detail           |
 
-Persistent typing-session endpoints require an authenticated identity.
+### Historical analytics
+
+| Method | Route                           | Purpose                                                           |
+| ------ | ------------------------------- | ----------------------------------------------------------------- |
+| `GET`  | `/analytics/overview?range=30d` | Retrieve the authenticated user's historical performance overview |
+
+Supported ranges are `7d`, `30d`, and `all`; the default is `30d`.
+
+Authenticated typing-session and analytics endpoints require an authenticated identity.
 
 ## Validation
 
@@ -360,21 +365,4 @@ The full-stack E2E job uses the same `pnpm test:e2e` entry point available for l
 
 ## Project status
 
-Current development milestone:
-
-**v0.3.0 — Identity & Private History**
-
-At this stage the project includes:
-
-- dynamic typing-target generation;
-- local guest practice;
-- email/password identity and secure browser authentication;
-- authenticated persistent sessions;
-- server-enforced session ownership;
-- private paginated history;
-- private session detail;
-- full-stack authenticated E2E validation across Next.js, NestJS, and PostgreSQL.
-
-The project is intentionally developed through incremental vertical slices. Functionality and infrastructure are introduced when a real product capability requires them rather than being added speculatively.
-
-Behavioral event analytics, richer historical analysis, application containerization, and cloud infrastructure remain outside the currently implemented scope.
+Current development stage: **v0.4.0 — Historical Dashboard**

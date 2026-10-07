@@ -1,6 +1,7 @@
 'use client';
 
 import {
+    IconActivity,
     IconBrandGithub,
     IconChevronDown,
     IconHistory,
@@ -128,6 +129,18 @@ export function AppHeader() {
                                     aria-label="Account menu"
                                     className="border-border-strong bg-background absolute top-full right-0 z-50 mt-2 min-w-48 border p-1 shadow-[0_16px_40px_rgba(0,0,0,0.45)]"
                                 >
+                                    <Link
+                                        href="/dashboard"
+                                        role="menuitem"
+                                        onClick={() => {
+                                            setIsAccountMenuOpen(false);
+                                        }}
+                                        className="text-muted hover:bg-surface-raised hover:text-accent focus-visible:bg-surface-raised focus-visible:text-accent flex items-center gap-2.5 px-3 py-2 text-xs tracking-[0.04em] transition-colors focus-visible:outline-none"
+                                    >
+                                        <IconActivity size={15} stroke={1.75} aria-hidden="true" />
+                                        <span>dashboard</span>
+                                    </Link>
+
                                     <Link
                                         href="/history"
                                         role="menuitem"

@@ -30,7 +30,7 @@ function isCreatedSessionPayload(value: unknown): value is CreatedSessionPayload
     );
 }
 
-test('registers, logs in, completes a generated test, and opens the persisted session from private history', async ({
+test('registers, logs in, completes a generated test, opens the persisted session from private history, and verifies the historical dashboard', async ({
     page,
 }, testInfo) => {
     const email = `e2e-user-${String(testInfo.retry)}@example.com`;
@@ -195,4 +195,18 @@ test('registers, logs in, completes a generated test, and opens the persisted se
     await expect(detail).toContainText('accuracy');
 
     await expect(detail).toContainText('consistency');
+
+    await page.goto('/dashboard');
+
+    await expect(
+        page.getByRole('heading', {
+            name: 'Historical performance',
+        }),
+    ).toBeVisible();
+
+    await expect(page.getByTestId('dashboard-data')).toBeVisible();
+
+    await expect(page.getByTestId('dashboard-session-count')).toHaveText('1');
+
+    await expect(page.getByTestId('dashboard-history-row')).toHaveCount(1);
 });
