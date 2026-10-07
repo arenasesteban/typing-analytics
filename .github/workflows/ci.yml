@@ -109,6 +109,8 @@ jobs:
 
             - name: Run authenticated full-stack E2E
               run: pnpm test:e2e
+              env:
+                  DEBUG: pw:webserver
 
             - name: Upload Playwright report
               if: ${{ !cancelled() }}

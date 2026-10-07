@@ -68,6 +68,10 @@ export default defineConfig({
             timeout: 120_000,
             stdout: 'pipe',
             stderr: 'pipe',
+            gracefulShutdown: {
+                signal: 'SIGTERM',
+                timeout: 1_000,
+            },
             env: {
                 NODE_ENV: 'test',
                 DATABASE_URL: E2E_DATABASE_URL,
@@ -88,6 +92,10 @@ export default defineConfig({
             timeout: 120_000,
             stdout: 'pipe',
             stderr: 'pipe',
+            gracefulShutdown: {
+                signal: 'SIGTERM',
+                timeout: 1_000,
+            },
             env: {
                 NEXT_PUBLIC_API_BASE_URL: API_BASE_URL,
             },
