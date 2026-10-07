@@ -178,13 +178,10 @@ Public routes:
 Authenticated routes:
 
 ```text
+/dashboard
 /history
 /history/:id
 ```
-
-`/history` provides the authenticated user's completed sessions using server-controlled pagination.
-
-`/history/:id` displays the concrete typing target, metrics, input counts, and timestamps stored for an accessible completed session.
 
 ## API overview
 
@@ -213,18 +210,9 @@ Authenticated routes:
 | ------ | ------------------------------- | ----------------------------------------------------------------- |
 | `GET`  | `/analytics/overview?range=30d` | Retrieve the authenticated user's historical performance overview |
 
-Supported temporal ranges are `7d`, `30d`, and `all`. When `range` is omitted, the API uses `30d`.
+Supported ranges are `7d`, `30d`, and `all`; the default is `30d`.
 
-The overview contains:
-
-- the number of completed sessions inside the selected range;
-- WPM and Accuracy from the most recently completed session in that range;
-- average persisted Consistency for the range;
-- chronologically ordered WPM and Accuracy trend points.
-
-Historical analytics are derived exclusively from completed sessions owned by the authenticated user.
-
-Persistent typing-session endpoints require an authenticated identity.
+Authenticated typing-session and analytics endpoints require an authenticated identity.
 
 ## Validation
 
