@@ -27,6 +27,7 @@
         "prisma:migrate:dev": "prisma migrate dev",
         "prisma:migrate:deploy": "prisma migrate deploy",
         "prisma:migrate:test": "prisma migrate deploy --config prisma7.integration.config.ts",
+        "prisma:generate:e2e": "prisma generate --config prisma7.e2e.config.ts",
         "prisma:migrate:e2e": "prisma migrate deploy --config prisma7.e2e.config.ts"
     },
     "dependencies": {

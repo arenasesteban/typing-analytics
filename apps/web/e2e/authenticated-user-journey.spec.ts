@@ -154,11 +154,16 @@ test('registers, logs in, completes a generated test, and opens the persisted se
         })
         .click();
 
-    await page
-        .getByRole('menuitem', {
-            name: 'history',
-        })
-        .click();
+    await Promise.all([
+        page.waitForURL(/\/history$/, {
+            timeout: 30_000,
+        }),
+        page
+            .getByRole('menuitem', {
+                name: 'history',
+            })
+            .click(),
+    ]);
 
     await expect(page).toHaveURL(/\/history$/);
 
@@ -166,13 +171,16 @@ test('registers, logs in, completes a generated test, and opens the persisted se
 
     await expect(historyItem).toBeVisible();
 
-    await page
-        .getByRole('link', {
-            name: `Open session ${sessionId}`,
-        })
-        .click();
-
-    await expect(page).toHaveURL(new RegExp(`/history/${sessionId}$`));
+    await Promise.all([
+        page.waitForURL(new RegExp(`/history/${sessionId}$`), {
+            timeout: 30_000,
+        }),
+        page
+            .getByRole('link', {
+                name: `Open session ${sessionId}`,
+            })
+            .click(),
+    ]);
 
     const detail = page.getByTestId('history-detail');
 
