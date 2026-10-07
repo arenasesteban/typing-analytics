@@ -207,6 +207,23 @@ Authenticated routes:
 | `GET`  | `/typing-sessions?page=1&pageSize=20` | List private completed-session history    |
 | `GET`  | `/typing-sessions/:id`                | Retrieve private session detail           |
 
+### Historical analytics
+
+| Method | Route                           | Purpose                                                           |
+| ------ | ------------------------------- | ----------------------------------------------------------------- |
+| `GET`  | `/analytics/overview?range=30d` | Retrieve the authenticated user's historical performance overview |
+
+Supported temporal ranges are `7d`, `30d`, and `all`. When `range` is omitted, the API uses `30d`.
+
+The overview contains:
+
+- the number of completed sessions inside the selected range;
+- WPM and Accuracy from the most recently completed session in that range;
+- average persisted Consistency for the range;
+- chronologically ordered WPM and Accuracy trend points.
+
+Historical analytics are derived exclusively from completed sessions owned by the authenticated user.
+
 Persistent typing-session endpoints require an authenticated identity.
 
 ## Validation
@@ -360,21 +377,4 @@ The full-stack E2E job uses the same `pnpm test:e2e` entry point available for l
 
 ## Project status
 
-Current development milestone:
-
-**v0.3.0 — Identity & Private History**
-
-At this stage the project includes:
-
-- dynamic typing-target generation;
-- local guest practice;
-- email/password identity and secure browser authentication;
-- authenticated persistent sessions;
-- server-enforced session ownership;
-- private paginated history;
-- private session detail;
-- full-stack authenticated E2E validation across Next.js, NestJS, and PostgreSQL.
-
-The project is intentionally developed through incremental vertical slices. Functionality and infrastructure are introduced when a real product capability requires them rather than being added speculatively.
-
-Behavioral event analytics, richer historical analysis, application containerization, and cloud infrastructure remain outside the currently implemented scope.
+Current development stage: **v0.4.0 — Historical Dashboard**
