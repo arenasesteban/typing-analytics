@@ -365,4 +365,4 @@ The full-stack E2E job uses the same `pnpm test:e2e` entry point available for l
 
 ## Project status
 
-Current development stage: **v0.4.0 — Historical Dashboard**
+Current development stage: **v0.5.0 — Behavioral Analytics (in progress)**
