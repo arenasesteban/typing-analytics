@@ -4,6 +4,7 @@ import {
     Injectable,
     InternalServerErrorException,
     NotFoundException,
+    PayloadTooLargeException,
 } from '@nestjs/common';
 import {
     applyTypingInput,
@@ -15,6 +16,7 @@ import {
 } from '@typing-analytics/typing-core';
 
 import { PrismaService } from '../prisma/prisma.service.js';
+import type { Prisma } from '../generated/prisma/client.js';
 import type {
     CompleteTypingSessionRequest,
     CompletedTypingSessionResponse,
@@ -24,6 +26,11 @@ import type {
     TypingSessionHistoryQuery,
     TypingSessionHistoryResponse,
 } from './typing-sessions.types.js';
+
+import {
+    buildSessionEventDocument,
+    SessionEventDocumentTooLargeError,
+} from '../session-events/session-events.mapper.js';
 
 interface PersistedCompletedSession {
     readonly id: string;
@@ -275,29 +282,51 @@ export class TypingSessionsService {
             );
         }
 
-        const completion = await this.prisma.typingSession.updateMany({
-            where: {
-                id,
-                userId,
-                completedAt: null,
-            },
-            data: {
-                durationMs: summary.durationMs,
-                wpm: summary.wpm,
-                rawWpm: summary.rawWpm,
-                accuracy: summary.accuracy,
-                consistency: summary.consistency,
-                totalInputs: summary.totalInputs,
-                correctInputs: summary.correctInputs,
-                incorrectInputs: summary.incorrectInputs,
-                startedAt,
-                completedAt,
-            },
-        });
+        let eventDocument: ReturnType<typeof buildSessionEventDocument>;
 
-        if (completion.count !== 1) {
-            throw new ConflictException('Typing session has already been completed');
+        try {
+            eventDocument = buildSessionEventDocument(id, replayedSession);
+        } catch (error) {
+            if (error instanceof SessionEventDocumentTooLargeError) {
+                throw new PayloadTooLargeException(error.message);
+            }
+
+            throw error;
         }
+
+        await this.prisma.$transaction(async (tx) => {
+            const completion = await tx.typingSession.updateMany({
+                where: {
+                    id,
+                    userId,
+                    completedAt: null,
+                },
+                data: {
+                    durationMs: summary.durationMs,
+                    wpm: summary.wpm,
+                    rawWpm: summary.rawWpm,
+                    accuracy: summary.accuracy,
+                    consistency: summary.consistency,
+                    totalInputs: summary.totalInputs,
+                    correctInputs: summary.correctInputs,
+                    incorrectInputs: summary.incorrectInputs,
+                    startedAt,
+                    completedAt,
+                    eventDeliveryStatus: 'PENDING',
+                },
+            });
+
+            if (completion.count !== 1) {
+                throw new ConflictException('Typing session has already been completed');
+            }
+
+            await tx.sessionEventOutbox.create({
+                data: {
+                    sessionId: id,
+                    payload: eventDocument as unknown as Prisma.InputJsonValue,
+                },
+            });
+        });
 
         return {
             id: persistedSession.id,

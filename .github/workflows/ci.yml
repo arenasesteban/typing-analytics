@@ -41,7 +41,7 @@ jobs:
               run: pnpm build
 
     api-integration:
-        name: API / PostgreSQL Integration
+        name: API / PostgreSQL + MongoDB Integration
         runs-on: ubuntu-latest
 
         env:
@@ -52,6 +52,9 @@ jobs:
             JWT_ACCESS_SECRET: typing-analytics-ci-only-access-secret-0123456789abcdef
             JWT_ACCESS_TTL_SECONDS: 900
             REFRESH_TOKEN_TTL_DAYS: 30
+            MONGODB_URL: mongodb://localhost:27017
+            MONGODB_DB: typing_analytics_test
+            EVENT_DELIVERY_AUTOSTART: 'false'
 
         services:
             postgres:
@@ -64,6 +67,16 @@ jobs:
                     - 5432:5432
                 options: >-
                     --health-cmd "pg_isready -U typing_analytics -d typing_analytics_test"
+                    --health-interval 5s
+                    --health-timeout 5s
+                    --health-retries 10
+
+            mongo:
+                image: mongo:8.2
+                ports:
+                    - 27017:27017
+                options: >-
+                    --health-cmd "mongosh --quiet --eval 'db.adminCommand({ ping: 1 })'"
                     --health-interval 5s
                     --health-timeout 5s
                     --health-retries 10
