@@ -268,19 +268,19 @@ cp apps/api/.env.test.example apps/api/.env.test.local
 Start the isolated PostgreSQL and MongoDB services:
 
 ```bash
-docker compose --profile test up -d --wait postgres-test mongo-test
+pnpm integration:db:up
 ```
 
 Apply the committed migrations:
 
 ```bash
-pnpm --filter @typing-analytics/api prisma:migrate:test
+pnpm integration:db:migrate
 ```
 
 Run the integration suite:
 
 ```bash
-pnpm --filter @typing-analytics/api test:integration
+pnpm test:integration
 ```
 
 These tests exercise the real NestJS application against isolated PostgreSQL and MongoDB instances and cover persistence, authentication, ownership, authorization, completion, durable event delivery, recovery, and private-history behavior.
@@ -338,13 +338,13 @@ Prisma migrations are the authoritative PostgreSQL database-evolution mechanism.
 Validate the schema:
 
 ```bash
-pnpm --filter @typing-analytics/api prisma:validate
+pnpm db:validate
 ```
 
 Create a development migration after an approved schema change:
 
 ```bash
-pnpm --filter @typing-analytics/api exec prisma migrate dev --name <migration-name>
+pnpm db:migrate --name <migration-name>
 ```
 
 Reset the local development databases when necessary:
