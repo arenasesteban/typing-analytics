@@ -38,8 +38,6 @@ export type TypingSessionBehavioralResponse =
     | {
           readonly status: 'ready';
           readonly temporal: SessionBehavioralResult['temporal'];
-          readonly characters: SessionBehavioralResult['characters'];
-          readonly characterPolicy: SessionBehavioralResult['characterPolicy'];
       }
     | {
           readonly status: 'pending' | 'unavailable';

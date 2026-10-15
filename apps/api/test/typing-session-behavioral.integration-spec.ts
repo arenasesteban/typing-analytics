@@ -161,7 +161,6 @@ describe('GET /typing-sessions/:id behavioral results', () => {
         const inputs = correctInputs(session.typingText.text);
 
         const completed = await completeSession(owner.accessToken, session, inputs);
-
         await delivery.processPending();
 
         const detail = await getDetail(owner.accessToken, session.id);
@@ -184,13 +183,39 @@ describe('GET /typing-sessions/:id behavioral results', () => {
             throw new Error('Expected ready behavioral results');
         }
 
+        expect(Object.keys(detail.behavioral).sort()).toEqual(['status', 'temporal']);
+
+        expect(Object.keys(detail.behavioral.temporal).sort()).toEqual([
+            'errorMarkers',
+            'points',
+            'sampleIntervalMs',
+        ]);
+
+        expect(detail.behavioral.temporal.sampleIntervalMs).toBe(1000);
+
+        for (const point of detail.behavioral.temporal.points) {
+            expect(Object.keys(point).sort()).toEqual(['elapsedMs', 'rawWpm', 'wpm']);
+        }
+
+        const sampleTimes = detail.behavioral.temporal.points.map((point) => point.elapsedMs);
+
+        expect(new Set(sampleTimes).size).toBe(sampleTimes.length);
+
+        const expectedSampleCount =
+            completed.durationMs === 0 ? 1 : Math.ceil(completed.durationMs / 1000);
+
+        expect(sampleTimes).toHaveLength(expectedSampleCount);
+        expect(sampleTimes.at(-1)).toBe(completed.durationMs);
+
         const lastPoint = detail.behavioral.temporal.points.at(-1);
 
-        expect(lastPoint?.cumulativeWpm).toBeCloseTo(completed.wpm, 6);
-        expect(lastPoint?.cumulativeRawWpm).toBeCloseTo(completed.rawWpm, 6);
+        expect(lastPoint).toBeDefined();
+        expect(lastPoint?.elapsedMs).toBe(completed.durationMs);
+        expect(lastPoint?.wpm).toBeCloseTo(completed.wpm, 6);
+        expect(lastPoint?.rawWpm).toBeCloseTo(completed.rawWpm, 6);
     });
 
-    it('reconstructs error markers, corrections and character statistics', async () => {
+    it('reconstructs exact error markers and corrections', async () => {
         const { owner, session } = await createSession('corrections-detail@example.com');
         const inputs = correctedInputs(session.typingText.text);
 
@@ -217,12 +242,6 @@ describe('GET /typing-sessions/:id behavioral results', () => {
             correctionSequence: 1,
             correctionElapsedMs: 50,
         });
-
-        expect(
-            detail.behavioral.characters.some((character) => character.incorrectInputs > 0),
-        ).toBe(true);
-
-        expect(detail.behavioral.characterPolicy).toEqual(expected.characterPolicy);
     });
 
     it('returns unavailable for an old completed session without events', async () => {

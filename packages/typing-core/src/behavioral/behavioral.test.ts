@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { summarizeCompletedSession } from '../metrics';
 import { applyTypingInput, createTypingSession } from '../session';
 import type { TypingInput, TypingSessionState } from '../session';
-import { DEFAULT_BEHAVIORAL_OPTIONS, deriveSessionBehavioralResult } from './behavioral';
+import { SESSION_TEMPORAL_SAMPLE_INTERVAL_MS, deriveSessionBehavioralResult } from './behavioral';
 
 function completeSession(target: string, inputs: readonly TypingInput[]): TypingSessionState {
     return inputs.reduce<TypingSessionState>(
@@ -23,161 +23,166 @@ function createCorrectedSession(): TypingSessionState {
 }
 
 describe('deriveSessionBehavioralResult', () => {
-    it('rejects sessions that have not been completed', () => {
-        const session = createTypingSession('abc');
-
-        expect(() => deriveSessionBehavioralResult(session)).toThrow(
+    it('rejects incomplete sessions', () => {
+        expect(() => deriveSessionBehavioralResult(createTypingSession('abc'))).toThrow(
             'Only completed typing sessions can be summarized.',
         );
     });
 
-    it('uses the approved default policy', () => {
+    it('exposes only the approved temporal contract', () => {
         const result = deriveSessionBehavioralResult(createCorrectedSession());
 
-        expect(result.temporal.windowMs).toBe(DEFAULT_BEHAVIORAL_OPTIONS.windowMs);
+        expect(SESSION_TEMPORAL_SAMPLE_INTERVAL_MS).toBe(1000);
 
-        expect(result.characterPolicy).toEqual({
-            minimumSample: 5,
-            errorRateThresholdPct: 30,
-        });
-    });
-
-    it('produces deterministic results without changing the session', () => {
-        const session = createCorrectedSession();
-        const originalEvents = session.events.map((event) => ({
-            ...event,
-        }));
-
-        const first = deriveSessionBehavioralResult(session);
-        const second = deriveSessionBehavioralResult(session);
-
-        expect(first).toEqual(second);
-        expect(session.events).toEqual(originalEvents);
-    });
-
-    it('preserves the existing completed-session summary', () => {
-        const session = createCorrectedSession();
-        const before = summarizeCompletedSession(session);
-
-        deriveSessionBehavioralResult(session);
-
-        expect(summarizeCompletedSession(session)).toEqual(before);
-        expect(before.totalInputs).toBe(4);
-        expect(before.correctInputs).toBe(3);
-        expect(before.incorrectInputs).toBe(1);
-        expect(before.latenciesMs).toEqual([1_000, 1_000, 1_000, 3_000]);
-    });
-
-    it('matches the final WPM and Raw WPM summary values', () => {
-        const session = createCorrectedSession();
-        const summary = summarizeCompletedSession(session);
-
-        const result = deriveSessionBehavioralResult(session, {
-            windowMs: 2_000,
-        });
-
-        const finalPoint = result.temporal.points.at(-1);
-
-        expect(finalPoint?.elapsedMs).toBe(summary.durationMs);
-        expect(finalPoint?.cumulativeWpm).toBeCloseTo(summary.wpm);
-        expect(finalPoint?.cumulativeRawWpm).toBeCloseTo(summary.rawWpm);
-    });
-
-    it('calculates cumulative and window-based performance', () => {
-        const result = deriveSessionBehavioralResult(createCorrectedSession(), { windowMs: 2_000 });
-
-        const points = result.temporal.points;
-
-        expect(points.map((point) => point.elapsedMs)).toEqual([0, 2_000, 4_000, 6_000]);
-
-        expect(points[1].windowWpm).toBeCloseTo(6);
-        expect(points[1].windowRawWpm).toBeCloseTo(12);
-
-        expect(points[2].cumulativeWpm).toBeCloseTo(6);
-        expect(points[2].cumulativeRawWpm).toBeCloseTo(9);
-
-        expect(points[3].cumulativeWpm).toBeCloseTo(6);
-        expect(points[3].cumulativeRawWpm).toBeCloseTo(8);
-    });
-
-    it('includes insertions exactly on the right window boundary', () => {
-        const session = completeSession('abc', [
-            { type: 'insert', value: 'a', timestampMs: 100 },
-            { type: 'insert', value: 'b', timestampMs: 2_100 },
-            { type: 'insert', value: 'c', timestampMs: 4_100 },
+        expect(Object.keys(result)).toEqual(['temporal']);
+        expect(Object.keys(result.temporal)).toEqual([
+            'sampleIntervalMs',
+            'points',
+            'errorMarkers',
         ]);
 
-        const result = deriveSessionBehavioralResult(session, {
-            windowMs: 2_000,
-        });
+        expect(result.temporal.sampleIntervalMs).toBe(1000);
 
-        expect(result.temporal.points[1].windowWpm).toBeCloseTo(12);
-        expect(result.temporal.points[2].windowWpm).toBeCloseTo(6);
+        for (const point of result.temporal.points) {
+            expect(Object.keys(point)).toEqual(['elapsedMs', 'wpm', 'rawWpm']);
+        }
     });
 
-    it('uses the actual duration of a partial final window', () => {
+    it('generates exactly 25 points for a 25-second session', () => {
         const session = completeSession('ab', [
             { type: 'insert', value: 'a', timestampMs: 100 },
-            { type: 'insert', value: 'b', timestampMs: 2_600 },
+            { type: 'insert', value: 'b', timestampMs: 25_100 },
         ]);
 
-        const result = deriveSessionBehavioralResult(session, {
-            windowMs: 2_000,
-        });
+        const result = deriveSessionBehavioralResult(session);
 
-        const finalPoint = result.temporal.points.at(-1);
-
-        expect(finalPoint?.windowDurationMs).toBe(500);
-        expect(finalPoint?.windowWpm).toBeCloseTo(24);
-        expect(finalPoint?.cumulativeWpm).toBeCloseTo(9.6);
+        expect(result.temporal.points).toHaveLength(25);
+        expect(result.temporal.points.map((point) => point.elapsedMs)).toEqual(
+            Array.from({ length: 25 }, (_, index) => (index + 1) * 1000),
+        );
     });
 
-    it('returns zero for windows without insertions', () => {
-        const session = completeSession('abc', [
+    it('appends the exact final sample for noninteger seconds', () => {
+        const session = completeSession('ab', [
             { type: 'insert', value: 'a', timestampMs: 100 },
-            { type: 'insert', value: 'b', timestampMs: 7_100 },
-            { type: 'insert', value: 'c', timestampMs: 10_100 },
+            { type: 'insert', value: 'b', timestampMs: 25_450 },
         ]);
 
-        const result = deriveSessionBehavioralResult(session, {
-            windowMs: 2_000,
-        });
+        const result = deriveSessionBehavioralResult(session);
 
-        expect(result.temporal.points[2].windowWpm).toBe(0);
-        expect(result.temporal.points[2].windowRawWpm).toBe(0);
-        expect(result.temporal.points[3].windowWpm).toBe(0);
+        expect(result.temporal.points).toHaveLength(26);
+        expect(result.temporal.points.at(-2)?.elapsedMs).toBe(25_000);
+        expect(result.temporal.points.at(-1)?.elapsedMs).toBe(25_350);
     });
 
-    it('handles zero-duration sessions without invalid rates', () => {
+    it('does not duplicate the final sample on a whole second', () => {
+        const session = completeSession('ab', [
+            { type: 'insert', value: 'a', timestampMs: 100 },
+            { type: 'insert', value: 'b', timestampMs: 3_100 },
+        ]);
+
+        const result = deriveSessionBehavioralResult(session);
+
+        expect(result.temporal.points.map((point) => point.elapsedMs)).toEqual([
+            1_000, 2_000, 3_000,
+        ]);
+    });
+
+    it('handles a session shorter than one second', () => {
+        const session = completeSession('ab', [
+            { type: 'insert', value: 'a', timestampMs: 100 },
+            { type: 'insert', value: 'b', timestampMs: 450 },
+        ]);
+
+        const summary = summarizeCompletedSession(session);
+        const result = deriveSessionBehavioralResult(session);
+
+        expect(result.temporal.points).toHaveLength(1);
+        expect(result.temporal.points[0].elapsedMs).toBe(350);
+        expect(result.temporal.points[0].wpm).toBeCloseTo(summary.wpm);
+        expect(result.temporal.points[0].rawWpm).toBeCloseTo(summary.rawWpm);
+    });
+
+    it('handles zero-duration sessions without division by zero', () => {
         const session = completeSession('a', [{ type: 'insert', value: 'a', timestampMs: 100 }]);
 
         const result = deriveSessionBehavioralResult(session);
 
-        expect(result.temporal.points).toHaveLength(1);
-        expect(result.temporal.points[0]).toMatchObject({
-            elapsedMs: 0,
-            cumulativeWpm: 0,
-            cumulativeRawWpm: 0,
-            windowWpm: 0,
-            windowRawWpm: 0,
-        });
-
-        expect(result.characters[0].sampleCount).toBe(1);
+        expect(result.temporal.points).toEqual([
+            {
+                elapsedMs: 0,
+                wpm: 0,
+                rawWpm: 0,
+            },
+        ]);
     });
 
-    it('allows equal timestamps without changing existing timing rules', () => {
-        const session = completeSession('ab', [
+    it('calculates both series cumulatively', () => {
+        const session = completeSession('abc', [
             { type: 'insert', value: 'a', timestampMs: 100 },
-            { type: 'insert', value: 'b', timestampMs: 100 },
+            { type: 'insert', value: 'x', timestampMs: 1_100 },
+            { type: 'backspace', timestampMs: 1_200 },
+            { type: 'insert', value: 'b', timestampMs: 2_100 },
+            { type: 'insert', value: 'c', timestampMs: 2_600 },
         ]);
 
-        const result = deriveSessionBehavioralResult(session);
+        const points = deriveSessionBehavioralResult(session).temporal.points;
 
-        expect(result.temporal.points[0].cumulativeWpm).toBe(0);
-        expect(result.characters).toHaveLength(2);
+        expect(points.map((point) => point.elapsedMs)).toEqual([1_000, 2_000, 2_500]);
+
+        expect(points[0].wpm).toBeCloseTo(12);
+        expect(points[0].rawWpm).toBeCloseTo(24);
+
+        expect(points[1].wpm).toBeCloseTo(12);
+        expect(points[1].rawWpm).toBeCloseTo(18);
+
+        expect(points[2].wpm).toBeCloseTo(14.4);
+        expect(points[2].rawWpm).toBeCloseTo(19.2);
     });
 
-    it('keeps incorrect insertions after a Backspace correction', () => {
+    it('includes insertions at the exact sample boundary', () => {
+        const session = completeSession('abc', [
+            { type: 'insert', value: 'a', timestampMs: 100 },
+            { type: 'insert', value: 'b', timestampMs: 1_100 },
+            { type: 'insert', value: 'c', timestampMs: 2_100 },
+        ]);
+
+        const points = deriveSessionBehavioralResult(session).temporal.points;
+
+        expect(points.map((point) => point.elapsedMs)).toEqual([1_000, 2_000]);
+
+        expect(points[0].wpm).toBeCloseTo(24);
+        expect(points[1].wpm).toBeCloseTo(18);
+    });
+
+    it('reflects inactivity without adding fictional events', () => {
+        const session = completeSession('ab', [
+            { type: 'insert', value: 'a', timestampMs: 100 },
+            { type: 'insert', value: 'b', timestampMs: 4_100 },
+        ]);
+
+        const points = deriveSessionBehavioralResult(session).temporal.points;
+
+        expect(points.map((point) => point.elapsedMs)).toEqual([1_000, 2_000, 3_000, 4_000]);
+
+        expect(points[0].wpm).toBeCloseTo(12);
+        expect(points[1].wpm).toBeCloseTo(6);
+        expect(points[2].wpm).toBeCloseTo(4);
+        expect(points[3].wpm).toBeCloseTo(6);
+    });
+
+    it('matches the existing final WPM and Raw WPM', () => {
+        const session = createCorrectedSession();
+        const summary = summarizeCompletedSession(session);
+
+        const lastPoint = deriveSessionBehavioralResult(session).temporal.points.at(-1);
+
+        expect(lastPoint?.elapsedMs).toBe(summary.durationMs);
+        expect(lastPoint?.wpm).toBeCloseTo(summary.wpm);
+        expect(lastPoint?.rawWpm).toBeCloseTo(summary.rawWpm);
+    });
+
+    it('preserves exact error timestamps and corrections', () => {
         const result = deriveSessionBehavioralResult(createCorrectedSession());
 
         expect(result.temporal.errorMarkers).toEqual([
@@ -194,7 +199,7 @@ describe('deriveSessionBehavioralResult', () => {
         ]);
     });
 
-    it('associates repeated corrections with the correct insertion', () => {
+    it('associates repeated corrections with the original errors', () => {
         const session = completeSession('abc', [
             { type: 'insert', value: 'a', timestampMs: 100 },
             { type: 'insert', value: 'x', timestampMs: 200 },
@@ -205,122 +210,50 @@ describe('deriveSessionBehavioralResult', () => {
             { type: 'insert', value: 'c', timestampMs: 700 },
         ]);
 
-        const result = deriveSessionBehavioralResult(session);
-        const markers = result.temporal.errorMarkers;
-
         expect(session.status).toBe('completed');
+        expect(session.events).toHaveLength(7);
+
+        const markers = deriveSessionBehavioralResult(session).temporal.errorMarkers;
 
         expect(markers).toHaveLength(2);
 
         expect(markers[0]).toMatchObject({
             sequence: 1,
+            elapsedMs: 100,
             position: 1,
             expectedCharacter: 'b',
             enteredCharacter: 'x',
             corrected: true,
             correctionSequence: 2,
+            correctionElapsedMs: 200,
         });
 
         expect(markers[1]).toMatchObject({
             sequence: 3,
+            elapsedMs: 300,
             position: 1,
             expectedCharacter: 'b',
             enteredCharacter: 'y',
             corrected: true,
             correctionSequence: 4,
+            correctionElapsedMs: 400,
         });
-
-        const characterB = result.characters.find(
-            (character) => character.expectedCharacter === 'b',
-        );
-
-        expect(characterB?.sampleCount).toBe(3);
-        expect(characterB?.correctInputs).toBe(1);
-        expect(characterB?.incorrectInputs).toBe(2);
     });
 
-    it('does not mark an uncorrected error as corrected', () => {
+    it('preserves uncorrected errors', () => {
         const session = completeSession('ab', [
             { type: 'insert', value: 'a', timestampMs: 100 },
             { type: 'insert', value: 'x', timestampMs: 200 },
         ]);
 
-        const result = deriveSessionBehavioralResult(session);
-
-        expect(result.temporal.errorMarkers[0]).toMatchObject({
+        expect(deriveSessionBehavioralResult(session).temporal.errorMarkers[0]).toMatchObject({
             corrected: false,
             correctionSequence: null,
             correctionElapsedMs: null,
         });
     });
 
-    it('groups attempts by expected character, including corrected errors', () => {
-        const result = deriveSessionBehavioralResult(createCorrectedSession(), {
-            minimumSample: 2,
-            errorRateThresholdPct: 40,
-        });
-
-        const characterB = result.characters.find(
-            (character) => character.expectedCharacter === 'b',
-        );
-
-        expect(characterB).toEqual({
-            expectedCharacter: 'b',
-            sampleCount: 2,
-            correctInputs: 1,
-            incorrectInputs: 1,
-            errorRate: 50,
-            accuracy: 50,
-            sufficientSample: true,
-            problematic: true,
-        });
-
-        const characterA = result.characters.find(
-            (character) => character.expectedCharacter === 'a',
-        );
-
-        expect(characterA?.sufficientSample).toBe(false);
-        expect(characterA?.problematic).toBeNull();
-    });
-
-    it('classifies a character only with sufficient evidence', () => {
-        const session = completeSession('aaaaa', [
-            { type: 'insert', value: 'a', timestampMs: 100 },
-            { type: 'insert', value: 'x', timestampMs: 200 },
-            { type: 'insert', value: 'x', timestampMs: 300 },
-            { type: 'insert', value: 'a', timestampMs: 400 },
-            { type: 'insert', value: 'a', timestampMs: 500 },
-        ]);
-
-        const result = deriveSessionBehavioralResult(session);
-
-        expect(result.characters[0]).toMatchObject({
-            sampleCount: 5,
-            incorrectInputs: 2,
-            errorRate: 40,
-            accuracy: 60,
-            sufficientSample: true,
-            problematic: true,
-        });
-    });
-
-    it('distinguishes good performance from insufficient evidence', () => {
-        const session = completeSession('aaaaa', [
-            { type: 'insert', value: 'a', timestampMs: 100 },
-            { type: 'insert', value: 'a', timestampMs: 200 },
-            { type: 'insert', value: 'a', timestampMs: 300 },
-            { type: 'insert', value: 'a', timestampMs: 400 },
-            { type: 'insert', value: 'a', timestampMs: 500 },
-        ]);
-
-        const result = deriveSessionBehavioralResult(session);
-
-        expect(result.characters[0].sufficientSample).toBe(true);
-        expect(result.characters[0].problematic).toBe(false);
-        expect(result.characters[0].accuracy).toBe(100);
-    });
-
-    it('produces equivalent results for equivalent relative timestamps', () => {
+    it('produces identical results from equivalent relative timelines', () => {
         const first = completeSession('ab', [
             { type: 'insert', value: 'a', timestampMs: 100 },
             { type: 'insert', value: 'b', timestampMs: 2_100 },
@@ -334,44 +267,19 @@ describe('deriveSessionBehavioralResult', () => {
         expect(deriveSessionBehavioralResult(first)).toEqual(deriveSessionBehavioralResult(second));
     });
 
-    it('does not combine statistics from different sessions', () => {
-        const first = createCorrectedSession();
-
-        const second = completeSession('ab', [
-            { type: 'insert', value: 'a', timestampMs: 100 },
-            { type: 'insert', value: 'b', timestampMs: 200 },
-        ]);
-
-        const original = deriveSessionBehavioralResult(first);
-
-        deriveSessionBehavioralResult(second);
-
-        expect(deriveSessionBehavioralResult(first)).toEqual(original);
-        expect(original.temporal.errorMarkers).toHaveLength(1);
-    });
-
-    it('rejects invalid configuration', () => {
+    it('preserves the original session and existing metrics', () => {
         const session = createCorrectedSession();
+        const originalEvents = session.events.map((event) => ({
+            ...event,
+        }));
+        const originalSummary = summarizeCompletedSession(session);
 
-        expect(() => deriveSessionBehavioralResult(session, { windowMs: 0 })).toThrow(RangeError);
+        const first = deriveSessionBehavioralResult(session);
+        const second = deriveSessionBehavioralResult(session);
 
-        expect(() =>
-            deriveSessionBehavioralResult(session, {
-                minimumSample: 0,
-            }),
-        ).toThrow(RangeError);
-
-        expect(() =>
-            deriveSessionBehavioralResult(session, {
-                errorRateThresholdPct: 101,
-            }),
-        ).toThrow(RangeError);
-
-        expect(() =>
-            deriveSessionBehavioralResult(session, {
-                windowMs: Number.POSITIVE_INFINITY,
-            }),
-        ).toThrow(RangeError);
+        expect(first).toEqual(second);
+        expect(session.events).toEqual(originalEvents);
+        expect(summarizeCompletedSession(session)).toEqual(originalSummary);
     });
 
     it('rejects inconsistent event sequences', () => {

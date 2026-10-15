@@ -1,8 +1,6 @@
-export { DEFAULT_BEHAVIORAL_OPTIONS, deriveSessionBehavioralResult } from './behavioral';
+export { SESSION_TEMPORAL_SAMPLE_INTERVAL_MS, deriveSessionBehavioralResult } from './behavioral';
 
 export type {
-    BehavioralOptions,
-    CharacterStatistics,
     SessionBehavioralResult,
     TemporalPerformancePoint,
     TypingErrorMarker,

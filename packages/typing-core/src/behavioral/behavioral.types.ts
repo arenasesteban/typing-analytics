@@ -1,16 +1,7 @@
-export interface BehavioralOptions {
-    readonly windowMs?: number;
-    readonly minimumSample?: number;
-    readonly errorRateThresholdPct?: number;
-}
-
 export interface TemporalPerformancePoint {
     readonly elapsedMs: number;
-    readonly windowDurationMs: number;
-    readonly cumulativeWpm: number;
-    readonly cumulativeRawWpm: number;
-    readonly windowWpm: number;
-    readonly windowRawWpm: number;
+    readonly wpm: number;
+    readonly rawWpm: number;
 }
 
 export interface TypingErrorMarker {
@@ -24,26 +15,10 @@ export interface TypingErrorMarker {
     readonly correctionElapsedMs: number | null;
 }
 
-export interface CharacterStatistics {
-    readonly expectedCharacter: string;
-    readonly sampleCount: number;
-    readonly correctInputs: number;
-    readonly incorrectInputs: number;
-    readonly errorRate: number;
-    readonly accuracy: number;
-    readonly sufficientSample: boolean;
-    readonly problematic: boolean | null;
-}
-
 export interface SessionBehavioralResult {
     readonly temporal: {
-        readonly windowMs: number;
+        readonly sampleIntervalMs: 1000;
         readonly points: readonly TemporalPerformancePoint[];
         readonly errorMarkers: readonly TypingErrorMarker[];
-    };
-    readonly characters: readonly CharacterStatistics[];
-    readonly characterPolicy: {
-        readonly minimumSample: number;
-        readonly errorRateThresholdPct: number;
     };
 }
