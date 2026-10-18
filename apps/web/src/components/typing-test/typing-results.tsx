@@ -9,6 +9,9 @@ import {
     IconTarget,
     type Icon,
 } from '@tabler/icons-react';
+import type { SessionBehavioralResult } from '@typing-analytics/typing-core';
+
+import { TemporalPerformanceChart } from '@/components/behavioral/temporal-performance-chart';
 
 export interface TypingResultSummary {
     readonly durationMs: number;
@@ -22,6 +25,7 @@ export interface TypingResultSummary {
 interface TypingResultsProps {
     readonly summary: TypingResultSummary;
     readonly persisted: boolean;
+    readonly temporal?: SessionBehavioralResult['temporal'] | undefined;
     readonly onRestart: () => void;
 }
 
@@ -60,14 +64,14 @@ function ResultMetric({ label, value, testId, icon: MetricIcon }: ResultMetricPr
     );
 }
 
-export function TypingResults({ summary, persisted, onRestart }: TypingResultsProps) {
+export function TypingResults({ summary, persisted, temporal, onRestart }: TypingResultsProps) {
     return (
         <section
             data-testid="typing-results"
             aria-labelledby="typing-results-title"
             className="w-full"
         >
-            <header className="mb-10">
+            <header className="mb-8">
                 <div className="text-accent-strong flex items-center gap-2">
                     <IconCircleCheck size={17} stroke={1.8} aria-hidden="true" />
 
@@ -84,19 +88,36 @@ export function TypingResults({ summary, persisted, onRestart }: TypingResultsPr
                 </h2>
             </header>
 
-            <div className="mb-10 flex items-end gap-4">
-                <IconGauge size={26} stroke={1.6} className="text-accent mb-1" aria-hidden="true" />
+            <div
+                className={
+                    temporal === undefined
+                        ? 'mb-8'
+                        : 'mb-8 grid min-w-0 gap-8 lg:grid-cols-[minmax(0,12rem)_minmax(0,1fr)] lg:items-center lg:gap-12'
+                }
+            >
+                <div className="flex items-end gap-4">
+                    <IconGauge
+                        size={26}
+                        stroke={1.6}
+                        className="text-accent mb-1 shrink-0"
+                        aria-hidden="true"
+                    />
 
-                <div>
-                    <p className="text-muted text-xs tracking-[0.14em] uppercase">WPM</p>
+                    <div>
+                        <p className="text-muted text-xs tracking-[0.14em] uppercase">WPM</p>
 
-                    <p
-                        data-testid="result-wpm"
-                        className="text-accent mt-1 text-5xl leading-none font-semibold"
-                    >
-                        {formatSpeed(summary.wpm)}
-                    </p>
+                        <p
+                            data-testid="result-wpm"
+                            className="text-accent mt-1 text-5xl leading-none font-semibold"
+                        >
+                            {formatSpeed(summary.wpm)}
+                        </p>
+                    </div>
                 </div>
+
+                {temporal !== undefined ? (
+                    <TemporalPerformanceChart temporal={temporal} variant="compact" />
+                ) : null}
             </div>
 
             <dl className="grid gap-x-8 gap-y-6 sm:grid-cols-2 lg:grid-cols-5">

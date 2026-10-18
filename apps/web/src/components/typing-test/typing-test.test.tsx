@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { DEFAULT_TYPING_WORD_COUNT } from '@typing-analytics/typing-core';
+
 import { TypingTest } from './typing-test';
 
 type TestAuthStatus = 'loading' | 'authenticated' | 'unauthenticated' | 'error';
@@ -76,10 +77,24 @@ async function typeAttempt(user: ReturnType<typeof userEvent.setup>, text: strin
     await user.keyboard(text);
 }
 
+function expectTemporalPerformanceChart(): void {
+    const chart = screen.getByTestId('temporal-performance-chart');
+
+    expect(chart).toBeInTheDocument();
+
+    expect(screen.getByTestId('chart-wpm-curve')).toBeInTheDocument();
+
+    expect(screen.getByTestId('chart-raw-wpm-curve')).toBeInTheDocument();
+
+    expect(chart.querySelectorAll('polyline')).toHaveLength(2);
+}
+
 beforeEach(() => {
     fetchMock.mockReset();
+
     authState.status = 'authenticated';
     authState.accessToken = 'test-access-token';
+
     vi.stubGlobal('fetch', fetchMock);
 });
 
@@ -230,7 +245,11 @@ describe('TypingTest persistent session integration', () => {
 
         expect(screen.getByTestId('result-errors')).toHaveTextContent('1');
 
+        expectTemporalPerformanceChart();
+
         expect(screen.getByTestId('persistence-status')).toHaveTextContent('completed');
+
+        expect(fetchMock).toHaveBeenCalledTimes(2);
     });
 
     it('shows persistence loading until the server validates the completed session', async () => {
@@ -258,9 +277,13 @@ describe('TypingTest persistent session integration', () => {
 
         expect(screen.queryByTestId('typing-results')).not.toBeInTheDocument();
 
+        expect(screen.queryByTestId('temporal-performance-chart')).not.toBeInTheDocument();
+
         resolveCompletion(jsonResponse(COMPLETED_SESSION, 200));
 
         expect(await screen.findByTestId('typing-results')).toBeInTheDocument();
+
+        expectTemporalPerformanceChart();
     });
 
     it('represents session creation failure', async () => {
@@ -306,6 +329,8 @@ describe('TypingTest persistent session integration', () => {
 
         expect(screen.queryByTestId('typing-results')).not.toBeInTheDocument();
 
+        expect(screen.queryByTestId('temporal-performance-chart')).not.toBeInTheDocument();
+
         expect(
             screen.getByRole('button', {
                 name: 'Start new test',
@@ -335,6 +360,8 @@ describe('TypingTest persistent session integration', () => {
 
         expect(await screen.findByTestId('typing-results')).toBeInTheDocument();
 
+        expectTemporalPerformanceChart();
+
         await user.click(
             screen.getByRole('button', {
                 name: 'Restart test',
@@ -346,6 +373,8 @@ describe('TypingTest persistent session integration', () => {
         expect(screen.getByTestId('typing-text')).toHaveTextContent('dog');
 
         expect(screen.queryByTestId('typing-results')).not.toBeInTheDocument();
+
+        expect(screen.queryByTestId('temporal-performance-chart')).not.toBeInTheDocument();
 
         expect(fetchMock).toHaveBeenCalledTimes(3);
 
@@ -368,12 +397,14 @@ describe('TypingTest persistent session integration', () => {
 
         const targetText = screen.getByTestId('typing-text').textContent;
 
-        expect(targetText).not.toBeNull();
+        expect(targetText.length).toBeGreaterThan(0);
 
         await user.click(surface);
         await user.keyboard(targetText);
 
         expect(await screen.findByTestId('typing-results')).toBeInTheDocument();
+
+        expectTemporalPerformanceChart();
 
         expect(fetchMock).not.toHaveBeenCalled();
 
@@ -394,12 +425,14 @@ describe('TypingTest persistent session integration', () => {
 
         const targetText = screen.getByTestId('typing-text').textContent;
 
-        expect(targetText).not.toBeNull();
+        expect(targetText.length).toBeGreaterThan(0);
 
         await user.click(surface);
         await user.keyboard(targetText);
 
-        await screen.findByTestId('typing-results');
+        expect(await screen.findByTestId('typing-results')).toBeInTheDocument();
+
+        expectTemporalPerformanceChart();
 
         await user.click(
             screen.getByRole('button', {
@@ -408,6 +441,8 @@ describe('TypingTest persistent session integration', () => {
         );
 
         expect(await screen.findByTestId('typing-surface')).toBeInTheDocument();
+
+        expect(screen.queryByTestId('temporal-performance-chart')).not.toBeInTheDocument();
 
         expect(randomSpy).toHaveBeenCalledTimes(DEFAULT_TYPING_WORD_COUNT * 2);
 

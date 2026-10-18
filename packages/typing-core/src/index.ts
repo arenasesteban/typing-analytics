@@ -1,3 +1,4 @@
+export * from './behavioral';
 export * from './metrics';
 export * from './session';
 export * from './typing-text';

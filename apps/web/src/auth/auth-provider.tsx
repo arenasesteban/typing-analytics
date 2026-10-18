@@ -11,7 +11,7 @@ import {
     registerUser,
     type AuthSession,
     type AuthUser,
-} from '@/lib/auth-api';
+} from '@/lib/api/auth/api';
 
 import { AuthContext, type AuthContextValue, type AuthStatus } from './auth-context';
 

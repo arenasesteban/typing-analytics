@@ -2,7 +2,7 @@
 
 Typing Analytics is a full-stack web application for typing practice, persistent session history, and the progressive analysis of typing performance.
 
-The project is built as a reproducible TypeScript monorepo with a framework-independent typing domain, a Next.js frontend, a NestJS REST API, PostgreSQL persistence, and automated validation across unit, component, integration, and end-to-end testing.
+The project is built as a reproducible TypeScript monorepo with a framework-independent typing domain, a Next.js frontend, a NestJS REST API, PostgreSQL for transactional persistence, MongoDB for validated typing events, and automated validation across unit, component, integration, and end-to-end testing.
 
 ## Features
 
@@ -12,6 +12,7 @@ The project is built as a reproducible TypeScript monorepo with a framework-inde
 - Short-lived access tokens with rotating refresh sessions.
 - Persistent typing sessions owned by authenticated users.
 - Server-side validation of completed typing sessions.
+- Durable persistence of validated typing events in MongoDB.
 - Private paginated session history.
 - Private session detail with the concrete target and persisted metrics.
 - Automated unit, component, API integration, and full-stack browser testing.
@@ -32,17 +33,24 @@ The project is built as a reproducible TypeScript monorepo with a framework-inde
 │ typing lifecycle     │   │ auth                 │
 │ target generation    │   │ ownership            │
 │ metrics              │   │ persistence          │
-└──────────┬───────────┘   └───────────┬──────────┘
-           ▲                           │
-           │                           ▼
-           │                  ┌──────────────────────┐
-           └──────────────────│     PostgreSQL       │
-                              └──────────────────────┘
+└──────────┬───────────┘   └──────────┬───────────┘
+           ▲                          │
+           │                 ┌────────┴────────┐
+           │                 ▼                 ▼
+           │        ┌────────────────┐ ┌────────────────┐
+           └────────│   PostgreSQL   │ │    MongoDB     │
+                    │                │ │                │
+                    │ sessions       │ │ validated      │
+                    │ metrics        │ │ event          │
+                    │ outbox         │ │ documents      │
+                    └────────────────┘ └────────────────┘
 ```
 
 `@typing-analytics/typing-core` contains the framework-independent typing domain and is shared by the browser and API.
 
 The browser handles the interactive typing lifecycle locally. For authenticated sessions, the API independently replays the submitted inputs, recalculates the result, and persists only server-validated session data.
+
+PostgreSQL remains the authoritative datastore for authentication, session ownership, completion state, and final metrics. MongoDB stores validated typing event documents associated with individual completed sessions. A PostgreSQL transactional outbox coordinates reliable delivery between both databases.
 
 ## Tech stack
 
@@ -51,11 +59,12 @@ The browser handles the interactive typing lifecycle locally. For authenticated 
 | Frontend                 | Next.js, React, TypeScript, Tailwind CSS      |
 | Backend                  | NestJS, TypeScript                            |
 | Domain                   | Framework-independent TypeScript package      |
-| Database                 | PostgreSQL                                    |
+| Transactional database   | PostgreSQL                                    |
+| Event datastore          | MongoDB                                       |
 | ORM                      | Prisma                                        |
 | Authentication           | JWT access tokens + rotating refresh sessions |
 | Unit / Component testing | Vitest, Testing Library                       |
-| API integration testing  | Vitest, Supertest, PostgreSQL                 |
+| API integration testing  | Vitest, Supertest, PostgreSQL, MongoDB        |
 | End-to-end testing       | Playwright                                    |
 | Local infrastructure     | Docker Compose                                |
 | CI                       | GitHub Actions                                |
@@ -67,7 +76,7 @@ The browser handles the interactive typing lifecycle locally. For authenticated 
 .
 ├── apps/
 │   ├── api/                  # NestJS REST API
-│   └── web/                  # Next.js application and Playwright E2E
+│   └── web/                  # Next.js application
 │
 ├── packages/
 │   └── typing-core/          # Shared typing domain
@@ -75,7 +84,10 @@ The browser handles the interactive typing lifecycle locally. For authenticated 
 ├── .github/
 │   └── workflows/            # Continuous Integration
 │
-├── compose.yaml              # Local PostgreSQL environments
+├── docs/
+│   └── adr/                  # Architecture Decision Records
+│
+├── compose.yaml              # Local PostgreSQL and MongoDB environments
 ├── package.json
 └── pnpm-workspace.yaml
 ```
@@ -110,7 +122,7 @@ cp apps/api/.env.example apps/api/.env
 cp apps/web/.env.example apps/web/.env.local
 ```
 
-Start PostgreSQL:
+Start PostgreSQL and MongoDB:
 
 ```bash
 pnpm db:up
@@ -138,9 +150,10 @@ pnpm dev:web
 The default local services are:
 
 ```text
-Web    http://localhost:3000
-API    http://localhost:3001
-DB     localhost:5433
+Web         http://localhost:3000
+API         http://localhost:3001
+PostgreSQL  localhost:5433
+MongoDB     localhost:27017
 ```
 
 ## Authentication and persistence model
@@ -164,6 +177,14 @@ The access token remains in browser memory. The reusable refresh credential is k
 Persistent typing sessions always belong to an authenticated user. Ownership is derived by the server from the authenticated identity and cannot be selected by the client.
 
 Guests can still use the typing application, but their sessions remain local and do not create permanent history.
+
+### Validated typing event persistence
+
+Typing Analytics uses PostgreSQL for authentication, session ownership, and final performance metrics, while MongoDB stores validated typing events for session-level behavioral analysis.
+
+A transactional outbox ensures reliable, recoverable, and idempotent event delivery between both databases without requiring distributed transactions.
+
+For architectural rationale, consistency guarantees, and recovery considerations, see [ADR-001 — MongoDB for Validated Typing Session Events](docs/adr/001-mongodb-session-events.md).
 
 ## Application routes
 
@@ -197,12 +218,12 @@ Authenticated routes:
 
 ### Typing sessions
 
-| Method | Route                                 | Purpose                                   |
-| ------ | ------------------------------------- | ----------------------------------------- |
-| `POST` | `/typing-sessions`                    | Create an owned persistent typing session |
-| `POST` | `/typing-sessions/:id/complete`       | Validate and persist a completed session  |
-| `GET`  | `/typing-sessions?page=1&pageSize=20` | List private completed-session history    |
-| `GET`  | `/typing-sessions/:id`                | Retrieve private session detail           |
+| Method | Route                                 | Purpose                                                              |
+| ------ | ------------------------------------- | -------------------------------------------------------------------- |
+| `POST` | `/typing-sessions`                    | Create an owned persistent typing session                            |
+| `POST` | `/typing-sessions/:id/complete`       | Validate and persist a completed session with durable event delivery |
+| `GET`  | `/typing-sessions?page=1&pageSize=20` | List private completed-session history                               |
+| `GET`  | `/typing-sessions/:id`                | Retrieve private session detail                                      |
 
 ### Historical analytics
 
@@ -228,7 +249,7 @@ pnpm build
 
 The test suite is intentionally split by responsibility instead of using browser E2E for every behavior.
 
-### API / PostgreSQL integration
+### API / PostgreSQL and MongoDB integration
 
 Create the local integration-test environment file.
 
@@ -244,29 +265,29 @@ Unix-like shells:
 cp apps/api/.env.test.example apps/api/.env.test.local
 ```
 
-Start the isolated PostgreSQL service:
+Start the isolated PostgreSQL and MongoDB services:
 
 ```bash
-docker compose --profile test up -d postgres-test
+pnpm integration:db:up
 ```
 
 Apply the committed migrations:
 
 ```bash
-pnpm --filter @typing-analytics/api prisma:migrate:test
+pnpm integration:db:migrate
 ```
 
 Run the integration suite:
 
 ```bash
-pnpm --filter @typing-analytics/api test:integration
+pnpm test:integration
 ```
 
-These tests exercise the real NestJS application against isolated PostgreSQL and cover persistence, authentication, ownership, authorization, completion, and private-history behavior.
+These tests exercise the real NestJS application against isolated PostgreSQL and MongoDB instances and cover persistence, authentication, ownership, authorization, completion, durable event delivery, recovery, and private-history behavior.
 
 ### Authenticated full-stack E2E
 
-The first multi-layer E2E journey uses Playwright with a dedicated PostgreSQL environment.
+The first multi-layer E2E journey uses Playwright with dedicated PostgreSQL and MongoDB environments.
 
 Install Chromium once:
 
@@ -280,7 +301,7 @@ Run the complete E2E procedure:
 pnpm test:e2e
 ```
 
-The command recreates the isolated E2E database, applies the committed Prisma migrations, starts the real NestJS API and Next.js application, and executes the Playwright suite in Chromium.
+The command recreates the isolated E2E datastores, applies the committed Prisma migrations to PostgreSQL, starts the real NestJS API and Next.js application, and executes the Playwright suite in Chromium.
 
 The journey verifies:
 
@@ -304,7 +325,7 @@ Run the journey with a visible browser:
 pnpm test:e2e:headed
 ```
 
-Remove the isolated E2E database when desired:
+Remove the isolated E2E databases when desired:
 
 ```bash
 pnpm e2e:db:down
@@ -312,27 +333,27 @@ pnpm e2e:db:down
 
 ## Database development
 
-Prisma migrations are the authoritative database-evolution mechanism.
+Prisma migrations are the authoritative PostgreSQL database-evolution mechanism.
 
 Validate the schema:
 
 ```bash
-pnpm --filter @typing-analytics/api prisma:validate
+pnpm db:validate
 ```
 
 Create a development migration after an approved schema change:
 
 ```bash
-pnpm --filter @typing-analytics/api exec prisma migrate dev --name <migration-name>
+pnpm db:migrate --name <migration-name>
 ```
 
-Reset the local development database when necessary:
+Reset the local development databases when necessary:
 
 ```bash
 pnpm db:reset
 ```
 
-> `pnpm db:reset` removes the local PostgreSQL development volume.
+> `pnpm db:reset` removes the local PostgreSQL and MongoDB development volumes.
 
 ## Continuous Integration
 
@@ -348,13 +369,13 @@ Validate
 ├── unit / component tests
 └── build
 
-API / PostgreSQL Integration
-├── ephemeral PostgreSQL
+API / PostgreSQL + MongoDB Integration
+├── ephemeral PostgreSQL and MongoDB
 ├── committed migrations
 └── NestJS integration tests
 
 Authenticated Full-Stack E2E
-├── isolated PostgreSQL
+├── isolated PostgreSQL and MongoDB
 ├── committed migrations
 ├── NestJS API
 ├── Next.js application
@@ -365,4 +386,4 @@ The full-stack E2E job uses the same `pnpm test:e2e` entry point available for l
 
 ## Project status
 
-Current development stage: **v0.4.0 — Historical Dashboard**
+Current development stage: **v0.5.0 — Behavioral Analytics**

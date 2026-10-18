@@ -80,6 +80,9 @@ export default defineConfig({
                 JWT_ACCESS_SECRET: 'typing-analytics-e2e-only-access-secret-0123456789abcdef',
                 JWT_ACCESS_TTL_SECONDS: '900',
                 REFRESH_TOKEN_TTL_DAYS: '30',
+                MONGODB_URL: 'mongodb://127.0.0.1:27019',
+                MONGODB_DB: 'typing_analytics_e2e',
+                EVENT_DELIVERY_AUTOSTART: 'true',
             },
         },
         {
@@ -89,7 +92,7 @@ export default defineConfig({
                 'pnpm --filter @typing-analytics/web exec next dev --hostname localhost --port 3100',
             url: WEB_BASE_URL,
             reuseExistingServer: false,
-            timeout: 120_000,
+            timeout: 240_000,
             stdout: 'pipe',
             stderr: 'pipe',
             gracefulShutdown: {

@@ -63,8 +63,39 @@ function normalizeNodeEnvironment(value: unknown): 'development' | 'test' | 'pro
     return candidate;
 }
 
+function parseBoolean(
+    config: Record<string, unknown>,
+    key: string,
+    defaultValue: boolean,
+): boolean {
+    const value = config[key];
+
+    if (value === undefined) return defaultValue;
+    if (value === true || value === 'true') return true;
+    if (value === false || value === 'false') return false;
+
+    throw new Error(`${key} must be true or false`);
+}
+
+function validateMongoDatabaseName(value: string): string {
+    if (!/^[a-zA-Z0-9_-]{1,64}$/.test(value)) {
+        throw new Error('MONGODB_DB must be a valid database name');
+    }
+
+    return value;
+}
+
 export function validateEnvironment(config: Record<string, unknown>): Record<string, unknown> {
     const databaseUrl = requireNonEmptyString(config, 'DATABASE_URL');
+
+    const mongoUrl = requireNonEmptyString(config, 'MONGODB_URL');
+    const mongoDatabase = validateMongoDatabaseName(requireNonEmptyString(config, 'MONGODB_DB'));
+    const nodeEnvironment = normalizeNodeEnvironment(config['NODE_ENV']);
+
+    if (!mongoUrl.startsWith('mongodb://') && !mongoUrl.startsWith('mongodb+srv://')) {
+        throw new Error('MONGODB_URL must use the mongodb or mongodb+srv protocol');
+    }
+
     const jwtAccessSecret = requireNonEmptyString(config, 'JWT_ACCESS_SECRET');
 
     if (Buffer.byteLength(jwtAccessSecret, 'utf8') < MINIMUM_JWT_SECRET_BYTES) {
@@ -75,7 +106,7 @@ export function validateEnvironment(config: Record<string, unknown>): Record<str
 
     return {
         ...config,
-        NODE_ENV: normalizeNodeEnvironment(config['NODE_ENV']),
+        NODE_ENV: nodeEnvironment,
         DATABASE_URL: databaseUrl,
         PORT: parseInteger(
             {
@@ -90,5 +121,12 @@ export function validateEnvironment(config: Record<string, unknown>): Record<str
         JWT_ACCESS_SECRET: jwtAccessSecret,
         JWT_ACCESS_TTL_SECONDS: parseInteger(config, 'JWT_ACCESS_TTL_SECONDS', 60, 3600),
         REFRESH_TOKEN_TTL_DAYS: parseInteger(config, 'REFRESH_TOKEN_TTL_DAYS', 1, 90),
+        MONGODB_URL: mongoUrl,
+        MONGODB_DB: mongoDatabase,
+        EVENT_DELIVERY_AUTOSTART: parseBoolean(
+            config,
+            'EVENT_DELIVERY_AUTOSTART',
+            nodeEnvironment !== 'test',
+        ),
     };
 }

@@ -258,6 +258,9 @@ describe('private typing session history', () => {
             incorrectInputs: session.incorrectInputs,
             startedAt: session.startedAt.toISOString(),
             completedAt: session.completedAt.toISOString(),
+            behavioral: {
+                status: 'unavailable',
+            },
         });
     });
 

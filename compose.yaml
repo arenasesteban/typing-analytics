@@ -55,5 +55,47 @@ services:
             timeout: 5s
             retries: 10
 
+    mongo:
+        image: mongo:8.2
+        restart: unless-stopped
+        ports:
+            - '127.0.0.1:27017:27017'
+        volumes:
+            - mongo_data:/data/db
+        healthcheck:
+            test: ['CMD', 'mongosh', '--quiet', '--eval', 'db.adminCommand({ ping: 1 })']
+            interval: 5s
+            timeout: 5s
+            retries: 10
+
+    mongo-test:
+        image: mongo:8.2
+        profiles:
+            - test
+        ports:
+            - '127.0.0.1:27018:27017'
+        tmpfs:
+            - /data/db
+        healthcheck:
+            test: ['CMD', 'mongosh', '--quiet', '--eval', 'db.adminCommand({ ping: 1 })']
+            interval: 5s
+            timeout: 5s
+            retries: 10
+
+    mongo-e2e:
+        image: mongo:8.2
+        profiles:
+            - e2e
+        ports:
+            - '127.0.0.1:27019:27017'
+        tmpfs:
+            - /data/db
+        healthcheck:
+            test: ['CMD', 'mongosh', '--quiet', '--eval', 'db.adminCommand({ ping: 1 })']
+            interval: 5s
+            timeout: 5s
+            retries: 10
+
 volumes:
     postgres_data:
+    mongo_data:

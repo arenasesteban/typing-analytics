@@ -7,6 +7,12 @@ datasource db {
   provider = "postgresql"
 }
 
+enum EventDeliveryStatus {
+  UNAVAILABLE
+  PENDING
+  READY
+}
+
 model User {
   id             String           @id @default(uuid()) @db.Uuid
   email          String           @unique @db.VarChar(254)
@@ -40,22 +46,38 @@ model TypingText {
 }
 
 model TypingSession {
-  id              String      @id @default(uuid()) @db.Uuid
-  userId          String      @map("user_id") @db.Uuid
-  typingTextId    String      @map("typing_text_id") @db.Uuid
-  durationMs      Float?      @map("duration_ms")
-  wpm             Float?
-  rawWpm          Float?      @map("raw_wpm")
-  accuracy        Float?
-  consistency     Float?
-  totalInputs     Int?        @map("total_inputs")
-  correctInputs   Int?        @map("correct_inputs")
-  incorrectInputs Int?        @map("incorrect_inputs")
-  startedAt       DateTime?   @map("started_at")
-  completedAt     DateTime?   @map("completed_at")
-  user            User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  typingText      TypingText  @relation(fields: [typingTextId], references: [id], onDelete: Restrict)
+  id                  String              @id @default(uuid()) @db.Uuid
+  userId              String              @map("user_id") @db.Uuid
+  typingTextId        String              @map("typing_text_id") @db.Uuid
+  durationMs          Float?              @map("duration_ms")
+  wpm                 Float?
+  rawWpm              Float?              @map("raw_wpm")
+  accuracy            Float?
+  consistency         Float?
+  totalInputs         Int?                @map("total_inputs")
+  correctInputs       Int?                @map("correct_inputs")
+  incorrectInputs     Int?                @map("incorrect_inputs")
+  startedAt           DateTime?           @map("started_at")
+  completedAt         DateTime?           @map("completed_at")
+  eventDeliveryStatus EventDeliveryStatus @default(UNAVAILABLE) @map("event_delivery_status")
+  eventOutbox         SessionEventOutbox?
+  user                User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  typingText          TypingText          @relation(fields: [typingTextId], references: [id], onDelete: Restrict)
 
   @@index([userId, completedAt, id], map: "typing_sessions_user_history_idx")
   @@map("typing_sessions")
+}
+
+model SessionEventOutbox {
+  sessionId     String        @id @map("session_id") @db.Uuid
+  payload       Json          @db.JsonB
+  attempts      Int           @default(0)
+  nextAttemptAt DateTime      @default(now()) @map("next_attempt_at")
+  leasedUntil   DateTime?     @map("leased_until")
+  leaseToken    String?       @map("lease_token") @db.Uuid
+  createdAt     DateTime      @default(now()) @map("created_at")
+  session       TypingSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([nextAttemptAt, leasedUntil], map: "session_event_outbox_due_idx")
+  @@map("session_event_outbox")
 }

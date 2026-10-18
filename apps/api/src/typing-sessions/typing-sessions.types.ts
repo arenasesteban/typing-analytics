@@ -1,4 +1,4 @@
-import type { TypingInput } from '@typing-analytics/typing-core';
+import type { SessionBehavioralResult, TypingInput } from '@typing-analytics/typing-core';
 
 export interface TypingTextResponse {
     readonly id: string;
@@ -34,7 +34,18 @@ export interface CompletedTypingSessionResponse extends PersistedTypingSessionRe
 
 export type TypingSessionHistoryItemResponse = PersistedTypingSessionResultResponse;
 
-export type TypingSessionHistoryDetailResponse = CompletedTypingSessionResponse;
+export type TypingSessionBehavioralResponse =
+    | {
+          readonly status: 'ready';
+          readonly temporal: SessionBehavioralResult['temporal'];
+      }
+    | {
+          readonly status: 'pending' | 'unavailable';
+      };
+
+export interface TypingSessionHistoryDetailResponse extends CompletedTypingSessionResponse {
+    readonly behavioral: TypingSessionBehavioralResponse;
+}
 
 export interface TypingSessionHistoryQuery {
     readonly page: number;

@@ -3,12 +3,14 @@
 import {
     applyTypingInput,
     createTypingSession as createTypingSessionState,
+    deriveSessionBehavioralResult,
     generateTypingText,
     summarizeCompletedSession,
+    type SessionBehavioralResult,
     type TypingInput,
     type TypingSessionState,
 } from '@typing-analytics/typing-core';
-import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 
 import { useAuth } from '@/auth/use-auth';
 import {
@@ -16,7 +18,7 @@ import {
     createTypingSession,
     type CompletedTypingSession,
     type CreatedTypingSession,
-} from '@/lib/typing-sessions-api';
+} from '@/lib/api/typing-sessions/api';
 
 export type TypingSessionMode = 'guest' | 'authenticated';
 
@@ -36,6 +38,7 @@ interface UseTypingSessionResult {
     readonly session: TypingSessionState | null;
     readonly status: TypingStatus;
     readonly result: TypingResult | null;
+    readonly behavioral: SessionBehavioralResult | null;
     readonly error: TypingError | null;
     readonly handleKeyDown: (event: KeyboardEvent<HTMLElement>) => void;
     readonly restartSession: () => void;
@@ -93,6 +96,14 @@ export function useTypingSession(): UseTypingSessionResult {
     const mountedRef = useRef(false);
 
     const activeModeRef = useRef<TypingSessionMode | null>(null);
+
+    const behavioral = useMemo<SessionBehavioralResult | null>(() => {
+        if (session?.status !== 'completed') {
+            return null;
+        }
+
+        return deriveSessionBehavioralResult(session);
+    }, [session]);
 
     const beginSession = useCallback(async (nextMode: TypingSessionMode, token: string | null) => {
         const generation = lifecycleGenerationRef.current + 1;
@@ -312,6 +323,7 @@ export function useTypingSession(): UseTypingSessionResult {
         session,
         status,
         result,
+        behavioral,
         error,
         handleKeyDown,
         restartSession,

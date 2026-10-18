@@ -15,11 +15,12 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 
 import { useAuth } from '@/auth/use-auth';
+import { TemporalPerformanceChart } from '@/components/behavioral/temporal-performance-chart';
 import {
     getTypingSessionHistoryDetail,
     TypingSessionsApiError,
     type TypingSessionHistoryDetail as TypingSessionHistoryDetailData,
-} from '@/lib/typing-sessions-api';
+} from '@/lib/api/typing-sessions/api';
 
 interface HistoryDetailProps {
     readonly sessionId: string;
@@ -306,6 +307,50 @@ export function HistoryDetail({ sessionId }: HistoryDetailProps) {
                         icon={IconAlertTriangle}
                     />
                 </dl>
+
+                {session.behavioral.status === 'ready' ? (
+                    <TemporalPerformanceChart temporal={session.behavioral.temporal} />
+                ) : session.behavioral.status === 'pending' ? (
+                    <section
+                        role="status"
+                        aria-live="polite"
+                        data-testid="history-behavioral-pending"
+                        className="border-border mt-10 border p-5"
+                    >
+                        <h2 className="text-foreground text-lg font-semibold">
+                            Behavioral results pending
+                        </h2>
+
+                        <p className="text-muted mt-2 text-sm leading-6">
+                            Your session metrics are available. The detailed event history is still
+                            being delivered.
+                        </p>
+
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setReloadKey((current) => current + 1);
+                            }}
+                            className="border-border text-foreground-secondary hover:border-accent focus-visible:ring-accent mt-5 cursor-pointer border px-4 py-2 text-sm focus-visible:ring-2 focus-visible:outline-none"
+                        >
+                            Check again
+                        </button>
+                    </section>
+                ) : (
+                    <section
+                        data-testid="history-behavioral-unavailable"
+                        className="border-border mt-10 border p-5"
+                    >
+                        <h2 className="text-foreground text-lg font-semibold">
+                            Behavioral results unavailable
+                        </h2>
+
+                        <p className="text-muted mt-2 text-sm leading-6">
+                            This session was saved before detailed typing events were retained. Its
+                            original metrics remain available.
+                        </p>
+                    </section>
+                )}
 
                 <dl className="border-border mt-6 grid gap-4 border-t pt-6 text-sm sm:grid-cols-2">
                     <div>

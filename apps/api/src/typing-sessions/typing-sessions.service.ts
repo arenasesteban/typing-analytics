@@ -2,8 +2,8 @@ import {
     BadRequestException,
     ConflictException,
     Injectable,
-    InternalServerErrorException,
     NotFoundException,
+    PayloadTooLargeException,
 } from '@nestjs/common';
 import {
     applyTypingInput,
@@ -14,88 +14,30 @@ import {
     type TypingSessionState,
 } from '@typing-analytics/typing-core';
 
+import type { Prisma } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service.js';
+import {
+    buildSessionEventDocument,
+    SessionEventDocumentTooLargeError,
+} from '../session-events/session-events.mapper.js';
+import { TypingSessionsBehavioralService } from './typing-sessions-behavioral.service.js';
+import { toHistoryItem } from './typing-sessions.mapper.js';
+import { completedSessionDetailSelect, completedSessionSelect } from './typing-sessions.selects.js';
 import type {
     CompleteTypingSessionRequest,
     CompletedTypingSessionResponse,
     CreatedTypingSessionResponse,
     TypingSessionHistoryDetailResponse,
-    TypingSessionHistoryItemResponse,
     TypingSessionHistoryQuery,
     TypingSessionHistoryResponse,
 } from './typing-sessions.types.js';
 
-interface PersistedCompletedSession {
-    readonly id: string;
-    readonly durationMs: number | null;
-    readonly wpm: number | null;
-    readonly rawWpm: number | null;
-    readonly accuracy: number | null;
-    readonly consistency: number | null;
-    readonly totalInputs: number | null;
-    readonly correctInputs: number | null;
-    readonly incorrectInputs: number | null;
-    readonly startedAt: Date | null;
-    readonly completedAt: Date | null;
-}
-
-interface PersistedCompletedSessionDetail extends PersistedCompletedSession {
-    readonly typingText: {
-        readonly id: string;
-        readonly text: string;
-    };
-}
-
-function toHistoryItem(session: PersistedCompletedSession): TypingSessionHistoryItemResponse {
-    const {
-        id,
-        durationMs,
-        wpm,
-        rawWpm,
-        accuracy,
-        consistency,
-        totalInputs,
-        correctInputs,
-        incorrectInputs,
-        startedAt,
-        completedAt,
-    } = session;
-
-    if (
-        durationMs === null ||
-        wpm === null ||
-        rawWpm === null ||
-        accuracy === null ||
-        consistency === null ||
-        totalInputs === null ||
-        correctInputs === null ||
-        incorrectInputs === null ||
-        startedAt === null ||
-        completedAt === null
-    ) {
-        throw new InternalServerErrorException(
-            'Completed typing session is missing persisted result data',
-        );
-    }
-
-    return {
-        id,
-        durationMs,
-        wpm,
-        rawWpm,
-        accuracy,
-        consistency,
-        totalInputs,
-        correctInputs,
-        incorrectInputs,
-        startedAt: startedAt.toISOString(),
-        completedAt: completedAt.toISOString(),
-    };
-}
-
 @Injectable()
 export class TypingSessionsService {
-    constructor(private readonly prisma: PrismaService) {}
+    constructor(
+        private readonly prisma: PrismaService,
+        private readonly behavioral: TypingSessionsBehavioralService,
+    ) {}
 
     async history(
         userId: string,
@@ -129,19 +71,7 @@ export class TypingSessionsService {
                 ],
                 skip,
                 take: query.pageSize,
-                select: {
-                    id: true,
-                    durationMs: true,
-                    wpm: true,
-                    rawWpm: true,
-                    accuracy: true,
-                    consistency: true,
-                    totalInputs: true,
-                    correctInputs: true,
-                    incorrectInputs: true,
-                    startedAt: true,
-                    completedAt: true,
-                },
+                select: completedSessionSelect,
             }),
         ]);
 
@@ -165,36 +95,23 @@ export class TypingSessionsService {
                     not: null,
                 },
             },
-            select: {
-                id: true,
-                durationMs: true,
-                wpm: true,
-                rawWpm: true,
-                accuracy: true,
-                consistency: true,
-                totalInputs: true,
-                correctInputs: true,
-                incorrectInputs: true,
-                startedAt: true,
-                completedAt: true,
-                typingText: {
-                    select: {
-                        id: true,
-                        text: true,
-                    },
-                },
-            },
+            select: completedSessionDetailSelect,
         });
 
         if (session === null) {
             throw new NotFoundException('Typing session not found');
         }
 
-        const persistedSession: PersistedCompletedSessionDetail = session;
+        const persistedResult = toHistoryItem(session);
+        const behavioral = await this.behavioral.getSessionBehavioralResult(
+            session,
+            persistedResult,
+        );
 
         return {
-            ...toHistoryItem(persistedSession),
-            typingText: persistedSession.typingText,
+            ...persistedResult,
+            typingText: session.typingText,
+            behavioral,
         };
     }
 
@@ -275,29 +192,51 @@ export class TypingSessionsService {
             );
         }
 
-        const completion = await this.prisma.typingSession.updateMany({
-            where: {
-                id,
-                userId,
-                completedAt: null,
-            },
-            data: {
-                durationMs: summary.durationMs,
-                wpm: summary.wpm,
-                rawWpm: summary.rawWpm,
-                accuracy: summary.accuracy,
-                consistency: summary.consistency,
-                totalInputs: summary.totalInputs,
-                correctInputs: summary.correctInputs,
-                incorrectInputs: summary.incorrectInputs,
-                startedAt,
-                completedAt,
-            },
-        });
+        let eventDocument: ReturnType<typeof buildSessionEventDocument>;
 
-        if (completion.count !== 1) {
-            throw new ConflictException('Typing session has already been completed');
+        try {
+            eventDocument = buildSessionEventDocument(id, replayedSession);
+        } catch (error) {
+            if (error instanceof SessionEventDocumentTooLargeError) {
+                throw new PayloadTooLargeException(error.message);
+            }
+
+            throw error;
         }
+
+        await this.prisma.$transaction(async (tx) => {
+            const completion = await tx.typingSession.updateMany({
+                where: {
+                    id,
+                    userId,
+                    completedAt: null,
+                },
+                data: {
+                    durationMs: summary.durationMs,
+                    wpm: summary.wpm,
+                    rawWpm: summary.rawWpm,
+                    accuracy: summary.accuracy,
+                    consistency: summary.consistency,
+                    totalInputs: summary.totalInputs,
+                    correctInputs: summary.correctInputs,
+                    incorrectInputs: summary.incorrectInputs,
+                    startedAt,
+                    completedAt,
+                    eventDeliveryStatus: 'PENDING',
+                },
+            });
+
+            if (completion.count !== 1) {
+                throw new ConflictException('Typing session has already been completed');
+            }
+
+            await tx.sessionEventOutbox.create({
+                data: {
+                    sessionId: id,
+                    payload: eventDocument as unknown as Prisma.InputJsonValue,
+                },
+            });
+        });
 
         return {
             id: persistedSession.id,
