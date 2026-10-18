@@ -93,7 +93,7 @@ jobs:
                   require-lockfile: true
 
             - name: Apply database migrations
-              run: pnpm --filter @typing-analytics/api prisma:migrate:test
+              run: pnpm --filter @typing-analytics/api prisma:migrate:integration
 
             - name: Run API integration tests
               run: pnpm --filter @typing-analytics/api test:integration
