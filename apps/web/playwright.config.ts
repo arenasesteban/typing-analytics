@@ -71,7 +71,7 @@ export default defineConfig({
             gracefulShutdown: {
                 signal: 'SIGTERM',
                 timeout: 1_000,
-            },  
+            },
             env: {
                 NODE_ENV: 'test',
                 DATABASE_URL: E2E_DATABASE_URL,
@@ -84,7 +84,6 @@ export default defineConfig({
                 MONGODB_DB: 'typing_analytics_e2e',
                 EVENT_DELIVERY_AUTOSTART: 'true',
             },
-
         },
         {
             name: 'web',
