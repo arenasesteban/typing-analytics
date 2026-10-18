@@ -186,7 +186,6 @@ describe('GET /typing-sessions/:id behavioral results', () => {
         expect(Object.keys(detail.behavioral).sort()).toEqual(['status', 'temporal']);
 
         expect(Object.keys(detail.behavioral.temporal).sort()).toEqual([
-            'errorMarkers',
             'points',
             'sampleIntervalMs',
         ]);
@@ -215,15 +214,19 @@ describe('GET /typing-sessions/:id behavioral results', () => {
         expect(lastPoint?.rawWpm).toBeCloseTo(completed.rawWpm, 6);
     });
 
-    it('reconstructs exact error markers and corrections', async () => {
+    it('preserves incorrect insertions and corrections', async () => {
         const { owner, session } = await createSession('corrections-detail@example.com');
+
         const inputs = correctedInputs(session.typingText.text);
 
-        await completeSession(owner.accessToken, session, inputs);
+        const completed = await completeSession(owner.accessToken, session, inputs);
+
         await delivery.processPending();
 
         const detail = await getDetail(owner.accessToken, session.id);
         const expected = deriveExpected(session.typingText.text, inputs);
+
+        expect(completed.incorrectInputs).toBeGreaterThan(0);
 
         expect(detail.behavioral).toEqual({
             status: 'ready',
@@ -234,14 +237,11 @@ describe('GET /typing-sessions/:id behavioral results', () => {
             throw new Error('Expected ready behavioral results');
         }
 
-        expect(detail.behavioral.temporal.errorMarkers[0]).toMatchObject({
-            sequence: 0,
-            elapsedMs: 0,
-            position: 0,
-            corrected: true,
-            correctionSequence: 1,
-            correctionElapsedMs: 50,
-        });
+        expect(Object.keys(detail.behavioral.temporal)).toEqual(['sampleIntervalMs', 'points']);
+
+        expect(detail.behavioral.temporal.points.at(-1)?.wpm).toBeCloseTo(completed.wpm, 6);
+
+        expect(detail.behavioral.temporal.points.at(-1)?.rawWpm).toBeCloseTo(completed.rawWpm, 6);
     });
 
     it('returns unavailable for an old completed session without events', async () => {
@@ -450,8 +450,5 @@ describe('GET /typing-sessions/:id behavioral results', () => {
         ) {
             throw new Error('Expected ready behavioral results');
         }
-
-        expect(firstDetail.behavioral.temporal.errorMarkers).toHaveLength(0);
-        expect(secondDetail.behavioral.temporal.errorMarkers.length).toBeGreaterThan(0);
     });
 });

@@ -199,18 +199,6 @@ test('registers, logs in, completes a typing test, verifies behavioral analytics
         throw new Error('Immediate behavioral curves have no SVG coordinates');
     }
 
-    const immediateErrorMarker = immediateChart.getByTestId('error-marker-0');
-
-    await expect(immediateErrorMarker).toBeVisible();
-
-    await immediateErrorMarker.click();
-
-    const immediateErrorDetail = immediateChart.getByTestId('selected-error-detail');
-
-    await expect(immediateErrorDetail).toBeVisible();
-
-    await expect(immediateErrorDetail).toContainText('Removed by Backspace');
-
     // Navigate to the authenticated session history.
 
     await page
@@ -307,20 +295,6 @@ test('registers, logs in, completes a typing test, verifies behavioral analytics
     await expect(historicalWpmCurve).toHaveAttribute('points', immediateWpmCoordinates);
 
     await expect(historicalRawWpmCurve).toHaveAttribute('points', immediateRawWpmCoordinates);
-
-    // The corrected error must also survive persistence.
-
-    const historicalErrorMarker = historicalChart.getByTestId('error-marker-0');
-
-    await expect(historicalErrorMarker).toBeVisible();
-
-    await historicalErrorMarker.click();
-
-    const historicalErrorDetail = historicalChart.getByTestId('selected-error-detail');
-
-    await expect(historicalErrorDetail).toBeVisible();
-
-    await expect(historicalErrorDetail).toContainText('Removed by Backspace');
 
     // Preserve the existing historical dashboard regression coverage.
 

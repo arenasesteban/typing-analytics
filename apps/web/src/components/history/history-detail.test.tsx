@@ -59,18 +59,6 @@ const READY_DETAIL = {
                 wpm: 72,
                 rawWpm: 78,
             })),
-            errorMarkers: [
-                {
-                    sequence: 2,
-                    elapsedMs: 4000,
-                    position: 2,
-                    expectedCharacter: 't',
-                    enteredCharacter: 'x',
-                    corrected: true,
-                    correctionSequence: 3,
-                    correctionElapsedMs: 4500,
-                },
-            ],
         },
     },
 };
@@ -148,8 +136,6 @@ describe('HistoryDetail', () => {
 
         expect(screen.getByTestId('chart-sample-count')).toHaveTextContent('60 temporal samples');
 
-        expect(screen.getByTestId('error-marker-2')).toBeInTheDocument();
-
         expect(screen.queryByTestId('history-behavioral-pending')).not.toBeInTheDocument();
 
         expect(screen.queryByTestId('history-behavioral-unavailable')).not.toBeInTheDocument();
@@ -159,34 +145,6 @@ describe('HistoryDetail', () => {
         expect(fetchMock.mock.calls[0]?.[0]).toBe(
             `http://localhost:3001/typing-sessions/${SESSION_ID}`,
         );
-    });
-
-    it('allows inspecting a corrected error from historical results', async () => {
-        fetchMock.mockResolvedValueOnce(jsonResponse(READY_DETAIL));
-
-        const user = userEvent.setup();
-
-        render(<HistoryDetail sessionId={SESSION_ID} />);
-
-        const marker = await screen.findByTestId('error-marker-2');
-
-        await user.click(marker);
-
-        expect(marker).toHaveAttribute('aria-pressed', 'true');
-
-        const detail = screen.getByTestId('selected-error-detail');
-
-        expect(detail).toHaveTextContent('Selected error');
-
-        expect(detail).toHaveTextContent('4.00 s');
-
-        expect(detail).toHaveTextContent('Expected');
-
-        expect(detail).toHaveTextContent('Entered');
-
-        expect(detail).toHaveTextContent('Removed by Backspace at 4.50 s');
-
-        expect(fetchMock).toHaveBeenCalledTimes(1);
     });
 
     it('renders PENDING without inventing behavioral results', async () => {

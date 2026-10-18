@@ -1,4 +1,4 @@
-import type { SessionBehavioralResult, TypingErrorMarker } from '@typing-analytics/typing-core';
+import type { SessionBehavioralResult } from '@typing-analytics/typing-core';
 
 import {
     hasExactKeys,
@@ -131,58 +131,15 @@ export function isTypingSessionHistoryResponse(
     );
 }
 
-function isErrorMarker(value: unknown): value is TypingErrorMarker {
-    if (
-        !isRecord(value) ||
-        !hasExactKeys(value, [
-            'sequence',
-            'elapsedMs',
-            'position',
-            'expectedCharacter',
-            'enteredCharacter',
-            'corrected',
-            'correctionSequence',
-            'correctionElapsedMs',
-        ])
-    ) {
-        return false;
-    }
-
-    if (
-        !isNonNegativeInteger(value['sequence']) ||
-        !isNonNegativeFiniteNumber(value['elapsedMs']) ||
-        !isNonNegativeInteger(value['position']) ||
-        typeof value['expectedCharacter'] !== 'string' ||
-        Array.from(value['expectedCharacter']).length !== 1 ||
-        typeof value['enteredCharacter'] !== 'string' ||
-        Array.from(value['enteredCharacter']).length !== 1 ||
-        typeof value['corrected'] !== 'boolean'
-    ) {
-        return false;
-    }
-
-    if (!value['corrected']) {
-        return value['correctionSequence'] === null && value['correctionElapsedMs'] === null;
-    }
-
-    return (
-        isNonNegativeInteger(value['correctionSequence']) &&
-        value['correctionSequence'] > value['sequence'] &&
-        isNonNegativeFiniteNumber(value['correctionElapsedMs']) &&
-        value['correctionElapsedMs'] >= value['elapsedMs']
-    );
-}
-
 function isTemporalResult(
     value: unknown,
     durationMs: number,
 ): value is SessionBehavioralResult['temporal'] {
     if (
         !isRecord(value) ||
-        !hasExactKeys(value, ['sampleIntervalMs', 'points', 'errorMarkers']) ||
+        !hasExactKeys(value, ['sampleIntervalMs', 'points']) ||
         value['sampleIntervalMs'] !== 1000 ||
-        !Array.isArray(value['points']) ||
-        !Array.isArray(value['errorMarkers'])
+        !Array.isArray(value['points'])
     ) {
         return false;
     }
@@ -211,12 +168,7 @@ function isTemporalResult(
         }
     }
 
-    return value['errorMarkers'].every(
-        (marker) =>
-            isErrorMarker(marker) &&
-            marker.elapsedMs <= durationMs &&
-            (marker.correctionElapsedMs === null || marker.correctionElapsedMs <= durationMs),
-    );
+    return true;
 }
 
 export function isTypingSessionBehavioralResponse(

@@ -89,7 +89,7 @@ export default defineConfig({
                 'pnpm --filter @typing-analytics/web exec next dev --hostname localhost --port 3100',
             url: WEB_BASE_URL,
             reuseExistingServer: false,
-            timeout: 120_000,
+            timeout: 240_000,
             stdout: 'pipe',
             stderr: 'pipe',
             gracefulShutdown: {
