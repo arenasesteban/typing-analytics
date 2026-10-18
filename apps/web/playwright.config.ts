@@ -71,7 +71,7 @@ export default defineConfig({
             gracefulShutdown: {
                 signal: 'SIGTERM',
                 timeout: 1_000,
-            },
+            },  
             env: {
                 NODE_ENV: 'test',
                 DATABASE_URL: E2E_DATABASE_URL,
@@ -80,7 +80,11 @@ export default defineConfig({
                 JWT_ACCESS_SECRET: 'typing-analytics-e2e-only-access-secret-0123456789abcdef',
                 JWT_ACCESS_TTL_SECONDS: '900',
                 REFRESH_TOKEN_TTL_DAYS: '30',
+                MONGODB_URL: 'mongodb://127.0.0.1:27019',
+                MONGODB_DB: 'typing_analytics_e2e',
+                EVENT_DELIVERY_AUTOSTART: 'true',
             },
+
         },
         {
             name: 'web',
