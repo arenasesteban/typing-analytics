@@ -58,7 +58,7 @@ function getErrorActionLabel(error: TypingError): string {
 export function TypingTest() {
     const typingSurfaceRef = useRef<HTMLDivElement>(null);
 
-    const { mode, session, status, result, error, handleKeyDown, restartSession } =
+    const { mode, session, status, result, behavioral, error, handleKeyDown, restartSession } =
         useTypingSession();
 
     useEffect(() => {
@@ -128,6 +128,7 @@ export function TypingTest() {
                 {status === 'completed' && result !== null ? (
                     <TypingResults
                         summary={result}
+                        temporal={behavioral?.temporal}
                         persisted={mode === 'authenticated'}
                         onRestart={restartSession}
                     />

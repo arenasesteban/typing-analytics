@@ -30,12 +30,14 @@ function isCreatedSessionPayload(value: unknown): value is CreatedSessionPayload
     );
 }
 
-test('registers, logs in, completes a generated test, opens the persisted session from private history, and verifies the historical dashboard', async ({
+test('registers, logs in, completes a typing test, verifies behavioral analytics in private history, and checks the dashboard', async ({
     page,
 }, testInfo) => {
     const email = `e2e-user-${String(testInfo.retry)}@example.com`;
 
     const password = 'TypingAnalyticsE2E!';
+
+    // Register a new user.
 
     await page.goto('/register');
 
@@ -65,6 +67,8 @@ test('registers, logs in, completes a generated test, opens the persisted sessio
 
     await expect(page.getByTestId('persistence-status')).toHaveText('ready');
 
+    // Sign out.
+
     await page
         .getByRole('button', {
             name: 'Account menu',
@@ -82,6 +86,8 @@ test('registers, logs in, completes a generated test, opens the persisted sessio
             name: 'sign in',
         }),
     ).toBeVisible();
+
+    // Sign in and capture the server-created typing session.
 
     await page.goto('/login');
 
@@ -132,7 +138,19 @@ test('registers, logs in, completes a generated test, opens the persisted sessio
 
     await expect(page.getByTestId('typing-text')).toHaveText(generatedTarget);
 
+    // Introduce one incorrect character and correct it with Backspace.
+
+    const firstCharacter = Array.from(generatedTarget)[0];
+
+    const incorrectCharacter = firstCharacter === 'x' ? 'z' : 'x';
+
     const typingSurface = page.getByTestId('typing-surface');
+
+    await typingSurface.pressSequentially(incorrectCharacter);
+
+    await typingSurface.press('Backspace');
+
+    // Complete the exact target assigned by the API.
 
     await typingSurface.pressSequentially(generatedTarget, {
         delay: 2,
@@ -147,6 +165,53 @@ test('registers, logs in, completes a generated test, opens the persisted sessio
     ).toBeVisible();
 
     await expect(page.getByTestId('persistence-status')).toHaveText('completed');
+
+    await expect(page.getByTestId('result-wpm')).toBeVisible();
+
+    await expect(page.getByTestId('result-raw-wpm')).toBeVisible();
+
+    await expect(page.getByTestId('result-accuracy')).toBeVisible();
+
+    await expect(page.getByTestId('result-errors')).toHaveText('1');
+
+    // Verify the immediate behavioral visualization.
+
+    const immediateChart = page.getByTestId('temporal-performance-chart');
+
+    await expect(immediateChart).toBeVisible();
+
+    await expect(immediateChart.locator('polyline')).toHaveCount(2);
+
+    const immediateWpmCurve = immediateChart.getByTestId('chart-wpm-curve');
+
+    const immediateRawWpmCurve = immediateChart.getByTestId('chart-raw-wpm-curve');
+
+    const immediateWpmCoordinates = await immediateWpmCurve.getAttribute('points');
+
+    const immediateRawWpmCoordinates = await immediateRawWpmCurve.getAttribute('points');
+
+    if (
+        immediateWpmCoordinates === null ||
+        immediateWpmCoordinates.length === 0 ||
+        immediateRawWpmCoordinates === null ||
+        immediateRawWpmCoordinates.length === 0
+    ) {
+        throw new Error('Immediate behavioral curves have no SVG coordinates');
+    }
+
+    const immediateErrorMarker = immediateChart.getByTestId('error-marker-0');
+
+    await expect(immediateErrorMarker).toBeVisible();
+
+    await immediateErrorMarker.click();
+
+    const immediateErrorDetail = immediateChart.getByTestId('selected-error-detail');
+
+    await expect(immediateErrorDetail).toBeVisible();
+
+    await expect(immediateErrorDetail).toContainText('Removed by Backspace');
+
+    // Navigate to the authenticated session history.
 
     await page
         .getByRole('button', {
@@ -195,6 +260,69 @@ test('registers, logs in, completes a generated test, opens the persisted sessio
     await expect(detail).toContainText('accuracy');
 
     await expect(detail).toContainText('consistency');
+
+    // Wait for asynchronous event delivery.
+    // The chart is rendered only when behavioral.status is READY.
+
+    const historicalChart = page.getByTestId('temporal-performance-chart');
+
+    const checkAgainButton = page.getByRole('button', {
+        name: 'Check again',
+        exact: true,
+    });
+
+    await expect
+        .poll(
+            async () => {
+                if (await historicalChart.isVisible()) {
+                    return true;
+                }
+
+                if (await checkAgainButton.isVisible()) {
+                    await checkAgainButton.click();
+                }
+
+                return false;
+            },
+            {
+                message: 'Historical behavioral analytics did not reach READY',
+                intervals: [1_000],
+                timeout: 30_000,
+            },
+        )
+        .toBe(true);
+
+    // Verify the historical visualization.
+
+    await expect(historicalChart).toBeVisible();
+
+    await expect(historicalChart.locator('polyline')).toHaveCount(2);
+
+    const historicalWpmCurve = historicalChart.getByTestId('chart-wpm-curve');
+
+    const historicalRawWpmCurve = historicalChart.getByTestId('chart-raw-wpm-curve');
+
+    // The persisted and immediate charts must describe the same session.
+
+    await expect(historicalWpmCurve).toHaveAttribute('points', immediateWpmCoordinates);
+
+    await expect(historicalRawWpmCurve).toHaveAttribute('points', immediateRawWpmCoordinates);
+
+    // The corrected error must also survive persistence.
+
+    const historicalErrorMarker = historicalChart.getByTestId('error-marker-0');
+
+    await expect(historicalErrorMarker).toBeVisible();
+
+    await historicalErrorMarker.click();
+
+    const historicalErrorDetail = historicalChart.getByTestId('selected-error-detail');
+
+    await expect(historicalErrorDetail).toBeVisible();
+
+    await expect(historicalErrorDetail).toContainText('Removed by Backspace');
+
+    // Preserve the existing historical dashboard regression coverage.
 
     await page.goto('/dashboard');
 

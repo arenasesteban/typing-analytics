@@ -8,7 +8,7 @@ import {
     getHistoricalAnalyticsOverview,
     type AnalyticsRange,
     type HistoricalAnalyticsOverview,
-} from '@/lib/analytics-api';
+} from '@/lib/api/analytics/api';
 
 type DashboardLoadStatus = 'loading' | 'ready' | 'error';
 

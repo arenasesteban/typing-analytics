@@ -14,7 +14,7 @@ import { useAuth } from '@/auth/use-auth';
 import {
     getTypingSessionHistory,
     type TypingSessionHistoryResponse,
-} from '@/lib/typing-sessions-api';
+} from '@/lib/api/typing-sessions/api';
 
 const HISTORY_PAGE_SIZE = 20;
 

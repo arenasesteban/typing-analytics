@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { HistoryDetail } from './history-detail';
@@ -42,6 +43,36 @@ const DETAIL = {
     incorrectInputs: 2,
     startedAt: '2026-10-05T17:59:00.000Z',
     completedAt: '2026-10-05T18:00:00.000Z',
+    behavioral: {
+        status: 'unavailable',
+    },
+};
+
+const READY_DETAIL = {
+    ...DETAIL,
+    behavioral: {
+        status: 'ready',
+        temporal: {
+            sampleIntervalMs: 1000,
+            points: Array.from({ length: 60 }, (_, index) => ({
+                elapsedMs: (index + 1) * 1000,
+                wpm: 72,
+                rawWpm: 78,
+            })),
+            errorMarkers: [
+                {
+                    sequence: 2,
+                    elapsedMs: 4000,
+                    position: 2,
+                    expectedCharacter: 't',
+                    enteredCharacter: 'x',
+                    corrected: true,
+                    correctionSequence: 3,
+                    correctionElapsedMs: 4500,
+                },
+            ],
+        },
+    },
 };
 
 beforeEach(() => {
@@ -100,6 +131,172 @@ describe('HistoryDetail', () => {
         });
     });
 
+    it('renders READY behavioral results for the requested session', async () => {
+        fetchMock.mockResolvedValueOnce(jsonResponse(READY_DETAIL));
+
+        render(<HistoryDetail sessionId={SESSION_ID} />);
+
+        const chart = await screen.findByTestId('temporal-performance-chart');
+
+        expect(chart).toBeInTheDocument();
+
+        expect(screen.getByTestId('chart-wpm-curve')).toBeInTheDocument();
+
+        expect(screen.getByTestId('chart-raw-wpm-curve')).toBeInTheDocument();
+
+        expect(chart.querySelectorAll('polyline')).toHaveLength(2);
+
+        expect(screen.getByTestId('chart-sample-count')).toHaveTextContent('60 temporal samples');
+
+        expect(screen.getByTestId('error-marker-2')).toBeInTheDocument();
+
+        expect(screen.queryByTestId('history-behavioral-pending')).not.toBeInTheDocument();
+
+        expect(screen.queryByTestId('history-behavioral-unavailable')).not.toBeInTheDocument();
+
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+
+        expect(fetchMock.mock.calls[0]?.[0]).toBe(
+            `http://localhost:3001/typing-sessions/${SESSION_ID}`,
+        );
+    });
+
+    it('allows inspecting a corrected error from historical results', async () => {
+        fetchMock.mockResolvedValueOnce(jsonResponse(READY_DETAIL));
+
+        const user = userEvent.setup();
+
+        render(<HistoryDetail sessionId={SESSION_ID} />);
+
+        const marker = await screen.findByTestId('error-marker-2');
+
+        await user.click(marker);
+
+        expect(marker).toHaveAttribute('aria-pressed', 'true');
+
+        const detail = screen.getByTestId('selected-error-detail');
+
+        expect(detail).toHaveTextContent('Selected error');
+
+        expect(detail).toHaveTextContent('4.00 s');
+
+        expect(detail).toHaveTextContent('Expected');
+
+        expect(detail).toHaveTextContent('Entered');
+
+        expect(detail).toHaveTextContent('Removed by Backspace at 4.50 s');
+
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('renders PENDING without inventing behavioral results', async () => {
+        fetchMock.mockResolvedValueOnce(
+            jsonResponse({
+                ...DETAIL,
+                behavioral: {
+                    status: 'pending',
+                },
+            }),
+        );
+
+        render(<HistoryDetail sessionId={SESSION_ID} />);
+
+        expect(await screen.findByTestId('history-behavioral-pending')).toBeInTheDocument();
+
+        expect(screen.getByTestId('history-behavioral-pending')).toHaveTextContent(
+            'Behavioral results pending',
+        );
+
+        expect(
+            screen.getByRole('button', {
+                name: 'Check again',
+            }),
+        ).toBeInTheDocument();
+
+        expect(screen.queryByTestId('temporal-performance-chart')).not.toBeInTheDocument();
+
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('preserves metrics for UNAVAILABLE historical sessions', async () => {
+        fetchMock.mockResolvedValueOnce(jsonResponse(DETAIL));
+
+        render(<HistoryDetail sessionId={SESSION_ID} />);
+
+        expect(await screen.findByTestId('history-behavioral-unavailable')).toBeInTheDocument();
+
+        expect(screen.getByTestId('history-behavioral-unavailable')).toHaveTextContent(
+            'Behavioral results unavailable',
+        );
+
+        expect(screen.getByTestId('history-detail')).toHaveTextContent('72');
+
+        expect(screen.getByTestId('history-detail')).toHaveTextContent('78');
+
+        expect(screen.getByTestId('history-detail')).toHaveTextContent('98.5%');
+
+        expect(screen.getByTestId('history-detail-target')).toHaveTextContent(
+            DETAIL.typingText.text,
+        );
+
+        expect(screen.queryByTestId('temporal-performance-chart')).not.toBeInTheDocument();
+
+        expect(
+            screen.queryByRole('button', {
+                name: 'Check again',
+            }),
+        ).not.toBeInTheDocument();
+    });
+
+    it('rechecks a pending session without introducing another endpoint', async () => {
+        fetchMock
+            .mockResolvedValueOnce(
+                jsonResponse({
+                    ...DETAIL,
+                    behavioral: {
+                        status: 'pending',
+                    },
+                }),
+            )
+            .mockResolvedValueOnce(jsonResponse(READY_DETAIL));
+
+        const user = userEvent.setup();
+
+        render(<HistoryDetail sessionId={SESSION_ID} />);
+
+        expect(await screen.findByTestId('history-behavioral-pending')).toBeInTheDocument();
+
+        await user.click(
+            screen.getByRole('button', {
+                name: 'Check again',
+            }),
+        );
+
+        expect(await screen.findByTestId('temporal-performance-chart')).toBeInTheDocument();
+
+        expect(screen.queryByTestId('history-behavioral-pending')).not.toBeInTheDocument();
+
+        expect(screen.getByTestId('chart-wpm-curve')).toBeInTheDocument();
+
+        expect(screen.getByTestId('chart-raw-wpm-curve')).toBeInTheDocument();
+
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+
+        const expectedUrl = `http://localhost:3001/typing-sessions/${SESSION_ID}`;
+
+        expect(fetchMock.mock.calls[0]?.[0]).toBe(expectedUrl);
+
+        expect(fetchMock.mock.calls[1]?.[0]).toBe(expectedUrl);
+
+        expect(fetchMock.mock.calls[1]?.[1]).toMatchObject({
+            method: 'GET',
+            headers: {
+                Accept: 'application/json',
+                Authorization: 'Bearer detail-access-token',
+            },
+        });
+    });
+
     it('represents missing or inaccessible detail without exposing ownership information', async () => {
         fetchMock.mockResolvedValueOnce(
             jsonResponse(
@@ -119,6 +316,8 @@ describe('HistoryDetail', () => {
         expect(screen.getByTestId('history-detail-unavailable')).not.toHaveTextContent(
             'belongs to another user',
         );
+
+        expect(screen.queryByTestId('temporal-performance-chart')).not.toBeInTheDocument();
     });
 
     it('represents a non-404 detail API failure', async () => {
@@ -140,5 +339,7 @@ describe('HistoryDetail', () => {
                 name: 'Try again',
             }),
         ).toBeInTheDocument();
+
+        expect(screen.queryByTestId('temporal-performance-chart')).not.toBeInTheDocument();
     });
 });

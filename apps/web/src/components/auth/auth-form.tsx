@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useState, type SyntheticEvent } from 'react';
 
 import { useAuth } from '@/auth/use-auth';
-import { AuthApiError } from '@/lib/auth-api';
+import { AuthApiError } from '@/lib/api/auth/api';
 
 export type AuthFormMode = 'login' | 'register';
 

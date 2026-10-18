@@ -2,7 +2,7 @@
 
 import { createContext } from 'react';
 
-import type { AuthUser } from '@/lib/auth-api';
+import type { AuthUser } from '@/lib/api/auth/api';
 
 export type AuthStatus = 'loading' | 'authenticated' | 'unauthenticated' | 'error';
 
