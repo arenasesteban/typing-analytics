@@ -11,6 +11,7 @@ const VALID_MONGODB_DB = 'typing_analytics_test';
 const VALID_JWT_ACCESS_SECRET = 'typing-analytics-test-access-secret-0123456789abcdef';
 
 const VALID_CONFIG = {
+    NODE_ENV: 'test',
     DATABASE_URL: VALID_DATABASE_URL,
     MONGODB_URL: VALID_MONGODB_URL,
     MONGODB_DB: VALID_MONGODB_DB,
@@ -172,5 +173,167 @@ describe('validateEnvironment', () => {
 
         expect(testing['EVENT_DELIVERY_AUTOSTART']).toBe(false);
         expect(development['EVENT_DELIVERY_AUTOSTART']).toBe(true);
+    });
+
+    it('rejects a missing Node environment', () => {
+        expect(() =>
+            validateEnvironment({
+                ...VALID_CONFIG,
+                NODE_ENV: undefined,
+            }),
+        ).toThrow('NODE_ENV is required');
+    });
+
+    it('rejects an unsupported Node environment', () => {
+        expect(() =>
+            validateEnvironment({
+                ...VALID_CONFIG,
+                NODE_ENV: 'staging',
+            }),
+        ).toThrow('NODE_ENV must be development, test, or production');
+    });
+
+    it('keeps local defaults in development', () => {
+        const config = validateEnvironment({
+            ...VALID_CONFIG,
+            NODE_ENV: 'development',
+            PORT: undefined,
+            WEB_ORIGIN: undefined,
+        });
+
+        expect(config['PORT']).toBe(3001);
+        expect(config['WEB_ORIGIN']).toBe('http://localhost:3000');
+    });
+
+    it('keeps local defaults in test', () => {
+        const config = validateEnvironment({
+            ...VALID_CONFIG,
+            PORT: undefined,
+            WEB_ORIGIN: undefined,
+        });
+
+        expect(config['PORT']).toBe(3001);
+        expect(config['WEB_ORIGIN']).toBe('http://localhost:3000');
+    });
+
+    it('accepts explicit production configuration', () => {
+        const config = validateEnvironment({
+            ...VALID_CONFIG,
+            NODE_ENV: 'production',
+            WEB_ORIGIN: 'https://app.example.com',
+            DATABASE_URL: 'postgresql://user:password@db.example.com:5432/typing_analytics',
+            MONGODB_URL: 'mongodb+srv://cluster.example.com',
+        });
+
+        expect(config['NODE_ENV']).toBe('production');
+        expect(config['WEB_ORIGIN']).toBe('https://app.example.com');
+        expect(config['PORT']).toBe(3001);
+    });
+
+    it('rejects a missing production port', () => {
+        expect(() =>
+            validateEnvironment({
+                ...VALID_CONFIG,
+                NODE_ENV: 'production',
+                PORT: undefined,
+                WEB_ORIGIN: 'https://app.example.com',
+            }),
+        ).toThrow('PORT is required in production');
+    });
+
+    it('rejects a missing production web origin', () => {
+        expect(() =>
+            validateEnvironment({
+                ...VALID_CONFIG,
+                NODE_ENV: 'production',
+                WEB_ORIGIN: undefined,
+            }),
+        ).toThrow('WEB_ORIGIN is required in production');
+    });
+
+    it('rejects an HTTP production web origin', () => {
+        expect(() =>
+            validateEnvironment({
+                ...VALID_CONFIG,
+                NODE_ENV: 'production',
+                WEB_ORIGIN: 'http://app.example.com',
+            }),
+        ).toThrow('WEB_ORIGIN must be a non-local HTTPS origin in production');
+    });
+
+    it('rejects a loopback production web origin', () => {
+        expect(() =>
+            validateEnvironment({
+                ...VALID_CONFIG,
+                NODE_ENV: 'production',
+                WEB_ORIGIN: 'https://localhost:3000',
+            }),
+        ).toThrow('WEB_ORIGIN must be a non-local HTTPS origin in production');
+    });
+
+    it('rejects an invalid PostgreSQL URL', () => {
+        expect(() =>
+            validateEnvironment({
+                ...VALID_CONFIG,
+                DATABASE_URL: 'not-a-postgres-url',
+            }),
+        ).toThrow('DATABASE_URL must be a valid PostgreSQL URL');
+    });
+
+    it('rejects a PostgreSQL URL without a database name', () => {
+        expect(() =>
+            validateEnvironment({
+                ...VALID_CONFIG,
+                DATABASE_URL: 'postgresql://localhost:5432',
+            }),
+        ).toThrow('DATABASE_URL must be a valid PostgreSQL URL');
+    });
+
+    it('accepts the postgres protocol', () => {
+        const config = validateEnvironment({
+            ...VALID_CONFIG,
+            DATABASE_URL: 'postgres://user:password@db.example.com:5432/typing_analytics',
+        });
+
+        expect(config['DATABASE_URL']).toBe(
+            'postgres://user:password@db.example.com:5432/typing_analytics',
+        );
+    });
+
+    it('rejects a MongoDB URL without a server', () => {
+        expect(() =>
+            validateEnvironment({
+                ...VALID_CONFIG,
+                MONGODB_URL: 'mongodb://',
+            }),
+        ).toThrow('MONGODB_URL must contain a valid server authority');
+    });
+
+    it('preserves MongoDB multi-host connection strings', () => {
+        const mongoUrl = 'mongodb://mongo1:27017,mongo2:27017/typing_analytics';
+
+        const config = validateEnvironment({
+            ...VALID_CONFIG,
+            MONGODB_URL: mongoUrl,
+        });
+
+        expect(config['MONGODB_URL']).toBe(mongoUrl);
+    });
+
+    it('does not expose database credentials in validation errors', () => {
+        const secret = 'sensitive-password-value';
+
+        try {
+            validateEnvironment({
+                ...VALID_CONFIG,
+                DATABASE_URL: `invalid://${secret}`,
+            });
+
+            expect.fail('Expected configuration validation to fail');
+        } catch (error) {
+            expect(error).toBeInstanceOf(Error);
+            expect((error as Error).message).toContain('DATABASE_URL');
+            expect((error as Error).message).not.toContain(secret);
+        }
     });
 });
