@@ -395,4 +395,4 @@ The full-stack E2E job uses the same `pnpm test:e2e` entry point available for l
 
 ## Project status
 
-Current development stage: **v0.5.0 — Behavioral Analytics**
+Current development stage: **v0.6.0 — Operational Safety & Reliability (in progress)**

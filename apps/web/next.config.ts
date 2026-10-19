@@ -1,4 +1,5 @@
 import type { NextConfig } from 'next';
+import { getWebSecurityHeaderRules } from './src/config/security-headers';
 
 const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
 
@@ -44,6 +45,10 @@ if (apiBaseUrl?.trim()) {
     }
 }
 
-const nextConfig: NextConfig = {};
+const nextConfig: NextConfig = {
+    poweredByHeader: false,
+    headers: () =>
+        Promise.resolve(getWebSecurityHeaderRules(process.env.NODE_ENV === 'production')),
+};
 
 export default nextConfig;
