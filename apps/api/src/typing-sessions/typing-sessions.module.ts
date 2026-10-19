@@ -9,9 +9,10 @@ import { TypingSessionHistoryQueryPipe } from './typing-session-history-query.pi
 import { TypingSessionsBehavioralService } from './typing-sessions-behavioral.service.js';
 import { TypingSessionsController } from './typing-sessions.controller.js';
 import { TypingSessionsService } from './typing-sessions.service.js';
+import { RateProtectionModule } from '../security/rate-protection.module.js';
 
 @Module({
-    imports: [AuthModule, PrismaModule, MongoModule],
+    imports: [AuthModule, PrismaModule, MongoModule, RateProtectionModule],
     controllers: [TypingSessionsController],
     providers: [
         TypingSessionsService,

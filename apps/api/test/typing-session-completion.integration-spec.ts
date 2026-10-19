@@ -17,6 +17,7 @@ import type {
     CreatedTypingSessionResponse,
 } from '../src/typing-sessions/typing-sessions.types.js';
 import { authorizationHeader, registerTestUser } from './auth-test-helpers.js';
+import { RateProtectionGuard } from '../src/security/rate-protection.guard.js';
 
 function buildCompletionInputs(
     targetText: string,
@@ -48,7 +49,12 @@ describe('POST /typing-sessions/:id/complete', () => {
     beforeAll(async () => {
         const moduleRef = await Test.createTestingModule({
             imports: [AppModule],
-        }).compile();
+        })
+            .overrideGuard(RateProtectionGuard)
+            .useValue({
+                canActivate: () => true,
+            })
+            .compile();
 
         app = moduleRef.createNestApplication();
         await app.init();

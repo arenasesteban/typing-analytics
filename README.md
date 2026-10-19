@@ -244,6 +244,21 @@ The API exposes two unauthenticated endpoints for operational checks:
 | `GET`  | `/health/live`  | Check whether the API process is responsive |
 | `GET`  | `/health/ready` | Check PostgreSQL and MongoDB availability   |
 
+### Targeted rate protection
+
+The API uses in-memory rate limiting with independent 60-second windows for sensitive endpoints.
+
+| Method | Route                           | Limit     | Tracked by         |
+| ------ | ------------------------------- | --------- | ------------------ |
+| `POST` | `/auth/register`                | 10/minute | Client IP          |
+| `POST` | `/auth/login`                   | 15/minute | Client IP          |
+| `POST` | `/auth/refresh`                 | 30/minute | Client IP          |
+| `POST` | `/auth/logout`                  | 30/minute | Client IP          |
+| `POST` | `/typing-sessions`              | 30/minute | Authenticated user |
+| `POST` | `/typing-sessions/:id/complete` | 30/minute | Authenticated user |
+
+Exceeding a limit returns HTTP `429 Too Many Requests`. Invalid requests count toward the limit. Read endpoints and health checks are excluded. Counters are scoped to each API process and reset on restart.
+
 ## Validation
 
 Run the standard repository gates from the project root:
