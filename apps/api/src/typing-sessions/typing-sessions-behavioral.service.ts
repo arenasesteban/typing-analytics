@@ -11,6 +11,7 @@ import type {
     PersistedTypingSessionResultResponse,
     TypingSessionBehavioralResponse,
 } from './typing-sessions.types.js';
+import { classifyOperationalFailure } from '../observability/operational-errors.js';
 
 function sameNumber(left: number, right: number): boolean {
     return Math.abs(left - right) <= 1e-6;
@@ -80,10 +81,15 @@ export class TypingSessionsBehavioralService {
                 ...result,
             };
         } catch (error) {
+            const failure = classifyOperationalFailure(error);
+
+            const category =
+                failure.subsystem === 'mongodb'
+                    ? 'event_store_unavailable'
+                    : 'behavioral_result_unavailable';
+
             this.logger.warn(
-                `Behavioral results unavailable for session ${session.id}: ${
-                    error instanceof Error ? error.name : 'UnknownError'
-                }`,
+                `behavioral_result_failed subsystem=${failure.subsystem} category=${category}`,
             );
 
             throw new ServiceUnavailableException('Behavioral results are temporarily unavailable');
