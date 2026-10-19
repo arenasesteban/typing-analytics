@@ -201,7 +201,7 @@ export function useTypingSession(): UseTypingSessionResult {
                 setError({
                     phase: 'completion',
                     message:
-                        'The test finished locally, but the validated result could not be saved. Start a new test.',
+                        'The test finished locally, but the API could not confirm whether it was saved. Check your session history before starting a new test.',
                 });
 
                 setStatus('error');

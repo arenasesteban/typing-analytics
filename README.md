@@ -235,6 +235,30 @@ Supported ranges are `7d`, `30d`, and `all`; the default is `30d`.
 
 Authenticated typing-session and analytics endpoints require an authenticated identity.
 
+### Operational health and readiness
+
+The API exposes two unauthenticated endpoints for operational checks:
+
+| Method | Route           | Purpose                                     |
+| ------ | --------------- | ------------------------------------------- |
+| `GET`  | `/health/live`  | Check whether the API process is responsive |
+| `GET`  | `/health/ready` | Check PostgreSQL and MongoDB availability   |
+
+### Targeted rate protection
+
+The API uses in-memory rate limiting with independent 60-second windows for sensitive endpoints.
+
+| Method | Route                           | Limit     | Tracked by         |
+| ------ | ------------------------------- | --------- | ------------------ |
+| `POST` | `/auth/register`                | 10/minute | Client IP          |
+| `POST` | `/auth/login`                   | 15/minute | Client IP          |
+| `POST` | `/auth/refresh`                 | 30/minute | Client IP          |
+| `POST` | `/auth/logout`                  | 30/minute | Client IP          |
+| `POST` | `/typing-sessions`              | 30/minute | Authenticated user |
+| `POST` | `/typing-sessions/:id/complete` | 30/minute | Authenticated user |
+
+Exceeding a limit returns HTTP `429 Too Many Requests`. Invalid requests count toward the limit. Read endpoints and health checks are excluded. Counters are scoped to each API process and reset on restart.
+
 ## Validation
 
 Run the standard repository gates from the project root:
@@ -386,4 +410,4 @@ The full-stack E2E job uses the same `pnpm test:e2e` entry point available for l
 
 ## Project status
 
-Current development stage: **v0.5.0 — Behavioral Analytics**
+Current development stage: **v0.6.0 — Operational Safety & Reliability (in progress)**

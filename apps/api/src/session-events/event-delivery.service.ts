@@ -11,6 +11,7 @@ import { MongoService } from '../mongo/mongo.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import type { SessionEventDocument } from './session-events.types.js';
 import { isSessionEventDocument } from './session-events.validator.js';
+import { classifyOperationalFailure } from '../observability/operational-errors.js';
 
 const POLL_INTERVAL_MS = 5_000;
 const LEASE_DURATION_MS = 60_000;
@@ -77,18 +78,24 @@ export class EventDeliveryService implements OnApplicationBootstrap, OnModuleDes
                     break;
                 }
 
+                let stage: 'validation' | 'mongodb_write' | 'postgresql_confirmation' =
+                    'validation';
+
                 try {
                     const document = this.parseDocument(delivery);
 
+                    stage = 'mongodb_write';
                     await this.mongo.writeSessionEvents(document);
+
+                    stage = 'postgresql_confirmation';
                     await this.confirmDelivery(delivery);
                 } catch (error) {
                     await this.deferDelivery(delivery);
 
+                    const failure = classifyOperationalFailure(error);
+
                     this.logger.warn(
-                        `Event delivery deferred for session ${delivery.sessionId}: ${
-                            error instanceof Error ? error.name : 'UnknownError'
-                        }`,
+                        `event_delivery_deferred stage=${stage} subsystem=${failure.subsystem} category=${failure.category}`,
                     );
                 }
             }
@@ -204,8 +211,10 @@ export class EventDeliveryService implements OnApplicationBootstrap, OnModuleDes
     }
 
     private logWorkerError(error: unknown): void {
+        const failure = classifyOperationalFailure(error);
+
         this.logger.error(
-            `Event delivery worker failed: ${error instanceof Error ? error.name : 'UnknownError'}`,
+            `event_delivery_worker_failed subsystem=${failure.subsystem} category=${failure.category}`,
         );
     }
 }

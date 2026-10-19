@@ -6,6 +6,7 @@ import { validateEnvironment } from './config/env.validation.js';
 import { PrismaModule } from './prisma/prisma.module.js';
 import { SessionEventsModule } from './session-events/session-events.module.js';
 import { TypingSessionsModule } from './typing-sessions/typing-sessions.module.js';
+import { HealthModule } from './health/health.module.js';
 
 @Module({
     imports: [
@@ -18,6 +19,7 @@ import { TypingSessionsModule } from './typing-sessions/typing-sessions.module.j
         TypingSessionsModule,
         AnalyticsModule,
         SessionEventsModule,
+        HealthModule,
     ],
 })
 export class AppModule {}

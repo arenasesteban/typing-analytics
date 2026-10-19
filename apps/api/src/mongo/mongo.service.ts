@@ -20,6 +20,10 @@ export class MongoService implements OnModuleDestroy {
         return this.client.db(this.databaseName).collection<SessionEventDocument>('session_events');
     }
 
+    async ping(): Promise<void> {
+        await this.client.db(this.databaseName).command({ ping: 1 });
+    }
+
     async writeSessionEvents(document: SessionEventDocument): Promise<void> {
         await this.collection.updateOne(
             { _id: document._id },

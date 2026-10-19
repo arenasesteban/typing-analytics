@@ -13,6 +13,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { Request, Response } from 'express';
+import { Throttle } from '@nestjs/throttler';
 
 import { AccessTokenGuard } from './access-token.guard.js';
 import {
@@ -24,6 +25,8 @@ import { AuthService } from './auth.service.js';
 import type { AuthSessionResponse, AuthUserResponse, AuthenticatedRequest } from './auth.types.js';
 import { LoginDto } from './dto/login.dto.js';
 import { RegisterDto } from './dto/register.dto.js';
+import { RATE_LIMIT_WINDOW_MS, RATE_LIMITS } from '../security/rate-protection.constants.js';
+import { RateProtectionGuard } from '../security/rate-protection.guard.js';
 
 @Controller('auth')
 @UsePipes(
@@ -40,6 +43,13 @@ export class AuthController {
     ) {}
 
     @Post('register')
+    @UseGuards(RateProtectionGuard)
+    @Throttle({
+        default: {
+            limit: RATE_LIMITS.register,
+            ttl: RATE_LIMIT_WINDOW_MS,
+        },
+    })
     async register(
         @Body() request: RegisterDto,
         @Res({ passthrough: true }) response: Response,
@@ -53,6 +63,13 @@ export class AuthController {
 
     @Post('login')
     @HttpCode(HttpStatus.OK)
+    @UseGuards(RateProtectionGuard)
+    @Throttle({
+        default: {
+            limit: RATE_LIMITS.login,
+            ttl: RATE_LIMIT_WINDOW_MS,
+        },
+    })
     async login(
         @Body() request: LoginDto,
         @Res({ passthrough: true }) response: Response,
@@ -66,6 +83,13 @@ export class AuthController {
 
     @Post('refresh')
     @HttpCode(HttpStatus.OK)
+    @UseGuards(RateProtectionGuard)
+    @Throttle({
+        default: {
+            limit: RATE_LIMITS.refresh,
+            ttl: RATE_LIMIT_WINDOW_MS,
+        },
+    })
     async refresh(
         @Req() request: Request,
         @Res({ passthrough: true }) response: Response,
@@ -80,6 +104,13 @@ export class AuthController {
 
     @Post('logout')
     @HttpCode(HttpStatus.NO_CONTENT)
+    @UseGuards(RateProtectionGuard)
+    @Throttle({
+        default: {
+            limit: RATE_LIMITS.logout,
+            ttl: RATE_LIMIT_WINDOW_MS,
+        },
+    })
     async logout(
         @Req() request: Request,
         @Res({ passthrough: true }) response: Response,

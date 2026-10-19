@@ -9,10 +9,12 @@ import { AuthController } from './auth.controller.js';
 import { AuthService } from './auth.service.js';
 import { PasswordService } from './password.service.js';
 import { RefreshTokenService } from './refresh-token.service.js';
+import { RateProtectionModule } from '../security/rate-protection.module.js';
 
 @Module({
     imports: [
         PrismaModule,
+        RateProtectionModule,
         JwtModule.registerAsync({
             imports: [ConfigModule],
             inject: [ConfigService],

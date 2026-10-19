@@ -1,5 +1,7 @@
 const MINIMUM_JWT_SECRET_BYTES = 32;
 
+type NodeEnvironment = 'development' | 'test' | 'production';
+
 function requireNonEmptyString(config: Record<string, unknown>, key: string): string {
     const value = config[key];
 
@@ -25,11 +27,41 @@ function parseInteger(
     return value;
 }
 
-function normalizeWebOrigin(value: unknown): string {
+function normalizeNodeEnvironment(value: unknown): NodeEnvironment {
+    if (typeof value !== 'string' || value.trim().length === 0) {
+        throw new Error('NODE_ENV is required');
+    }
+
+    const candidate = value.trim();
+
+    if (candidate !== 'development' && candidate !== 'test' && candidate !== 'production') {
+        throw new Error('NODE_ENV must be development, test, or production');
+    }
+
+    return candidate;
+}
+
+function isLocalHostname(hostname: string): boolean {
+    return (
+        hostname === 'localhost' ||
+        hostname.endsWith('.localhost') ||
+        hostname === '127.0.0.1' ||
+        hostname === '[::1]' ||
+        hostname === '0.0.0.0'
+    );
+}
+
+function normalizeWebOrigin(value: unknown, environment: NodeEnvironment): string {
     const candidate =
         typeof value === 'string' && value.trim().length > 0
             ? value.trim()
-            : 'http://localhost:3000';
+            : environment === 'production'
+              ? null
+              : 'http://localhost:3000';
+
+    if (candidate === null) {
+        throw new Error('WEB_ORIGIN is required in production');
+    }
 
     let parsedOrigin: URL;
 
@@ -50,17 +82,54 @@ function normalizeWebOrigin(value: unknown): string {
         throw new Error('WEB_ORIGIN must be a valid HTTP or HTTPS origin');
     }
 
+    if (
+        environment === 'production' &&
+        (parsedOrigin.protocol !== 'https:' || isLocalHostname(parsedOrigin.hostname))
+    ) {
+        throw new Error('WEB_ORIGIN must be a non-local HTTPS origin in production');
+    }
+
     return parsedOrigin.origin;
 }
 
-function normalizeNodeEnvironment(value: unknown): 'development' | 'test' | 'production' {
-    const candidate = typeof value === 'string' && value.length > 0 ? value : 'development';
+function validatePostgresUrl(value: string): string {
+    let parsedUrl: URL;
 
-    if (candidate !== 'development' && candidate !== 'test' && candidate !== 'production') {
-        throw new Error('NODE_ENV must be development, test, or production');
+    try {
+        parsedUrl = new URL(value);
+    } catch {
+        throw new Error('DATABASE_URL must be a valid PostgreSQL URL');
     }
 
-    return candidate;
+    if (
+        (parsedUrl.protocol !== 'postgresql:' && parsedUrl.protocol !== 'postgres:') ||
+        parsedUrl.hostname.length === 0 ||
+        parsedUrl.pathname.length <= 1
+    ) {
+        throw new Error('DATABASE_URL must be a valid PostgreSQL URL');
+    }
+
+    return value;
+}
+
+function validateMongoUrl(value: string): string {
+    const protocol = value.startsWith('mongodb+srv://')
+        ? 'mongodb+srv://'
+        : value.startsWith('mongodb://')
+          ? 'mongodb://'
+          : null;
+
+    if (protocol === null) {
+        throw new Error('MONGODB_URL must use the mongodb or mongodb+srv protocol');
+    }
+
+    const authority = value.slice(protocol.length).split(/[/?#]/, 1)[0];
+
+    if (!authority || authority.endsWith('@') || /\s/.test(authority)) {
+        throw new Error('MONGODB_URL must contain a valid server authority');
+    }
+
+    return value;
 }
 
 function parseBoolean(
@@ -86,15 +155,11 @@ function validateMongoDatabaseName(value: string): string {
 }
 
 export function validateEnvironment(config: Record<string, unknown>): Record<string, unknown> {
-    const databaseUrl = requireNonEmptyString(config, 'DATABASE_URL');
-
-    const mongoUrl = requireNonEmptyString(config, 'MONGODB_URL');
-    const mongoDatabase = validateMongoDatabaseName(requireNonEmptyString(config, 'MONGODB_DB'));
     const nodeEnvironment = normalizeNodeEnvironment(config['NODE_ENV']);
 
-    if (!mongoUrl.startsWith('mongodb://') && !mongoUrl.startsWith('mongodb+srv://')) {
-        throw new Error('MONGODB_URL must use the mongodb or mongodb+srv protocol');
-    }
+    const databaseUrl = validatePostgresUrl(requireNonEmptyString(config, 'DATABASE_URL'));
+    const mongoUrl = validateMongoUrl(requireNonEmptyString(config, 'MONGODB_URL'));
+    const mongoDatabase = validateMongoDatabaseName(requireNonEmptyString(config, 'MONGODB_DB'));
 
     const jwtAccessSecret = requireNonEmptyString(config, 'JWT_ACCESS_SECRET');
 
@@ -104,20 +169,21 @@ export function validateEnvironment(config: Record<string, unknown>): Record<str
         );
     }
 
+    const portConfig = {
+        ...config,
+        PORT: config['PORT'] ?? (nodeEnvironment === 'production' ? undefined : 3001),
+    };
+
+    if (nodeEnvironment === 'production' && portConfig.PORT === undefined) {
+        throw new Error('PORT is required in production');
+    }
+
     return {
         ...config,
         NODE_ENV: nodeEnvironment,
         DATABASE_URL: databaseUrl,
-        PORT: parseInteger(
-            {
-                ...config,
-                PORT: config['PORT'] ?? 3001,
-            },
-            'PORT',
-            1,
-            65535,
-        ),
-        WEB_ORIGIN: normalizeWebOrigin(config['WEB_ORIGIN']),
+        PORT: parseInteger(portConfig, 'PORT', 1, 65535),
+        WEB_ORIGIN: normalizeWebOrigin(config['WEB_ORIGIN'], nodeEnvironment),
         JWT_ACCESS_SECRET: jwtAccessSecret,
         JWT_ACCESS_TTL_SECONDS: parseInteger(config, 'JWT_ACCESS_TTL_SECONDS', 60, 3600),
         REFRESH_TOKEN_TTL_DAYS: parseInteger(config, 'REFRESH_TOKEN_TTL_DAYS', 1, 90),
