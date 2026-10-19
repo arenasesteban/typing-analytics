@@ -235,6 +235,15 @@ Supported ranges are `7d`, `30d`, and `all`; the default is `30d`.
 
 Authenticated typing-session and analytics endpoints require an authenticated identity.
 
+### Operational health and readiness
+
+The API exposes two unauthenticated endpoints for operational checks:
+
+| Method | Route           | Purpose                                     |
+| ------ | --------------- | ------------------------------------------- |
+| `GET`  | `/health/live`  | Check whether the API process is responsive |
+| `GET`  | `/health/ready` | Check PostgreSQL and MongoDB availability   |
+
 ## Validation
 
 Run the standard repository gates from the project root:
