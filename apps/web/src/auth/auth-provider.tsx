@@ -62,7 +62,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
                 return;
             }
 
-            setError(RECOVERY_ERROR_MESSAGE);
+            if (caughtError instanceof AuthApiError && caughtError.status === 429) {
+                setError(
+                    'Session recovery is temporarily rate-limited. Please wait before trying again.',
+                );
+            } else {
+                setError(RECOVERY_ERROR_MESSAGE);
+            }
+
             setStatus('error');
         }
     }, [clearAuthenticatedState]);

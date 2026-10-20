@@ -101,7 +101,7 @@ jobs:
               run: pnpm --filter @typing-analytics/api test:integration
 
     e2e:
-        name: Authenticated Full-Stack E2E
+        name: Critical Full-Stack E2E
         runs-on: ubuntu-latest
         timeout-minutes: 20
         needs:
@@ -122,7 +122,7 @@ jobs:
             - name: Install Chromium
               run: pnpm --filter @typing-analytics/web exec playwright install --with-deps chromium
 
-            - name: Run authenticated full-stack E2E
+            - name: Run critical application journeys
               run: pnpm test:e2e
               env:
                   DEBUG: pw:webserver

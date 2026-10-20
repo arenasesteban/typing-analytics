@@ -16,6 +16,10 @@ interface AuthFormProps {
 
 function getSubmitError(error: unknown, mode: AuthFormMode): string {
     if (error instanceof AuthApiError) {
+        if (error.status === 429) {
+            return 'Too many requests. Please wait before trying again.';
+        }
+
         if (mode === 'login' && error.status === 401) {
             return 'Invalid email or password.';
         }
@@ -139,32 +143,6 @@ export function AuthForm({ mode }: AuthFormProps) {
         );
     }
 
-    if (status === 'error') {
-        return (
-            <section className="flex w-full flex-1 items-center">
-                <div role="alert" className="mx-auto w-full max-w-md px-6 py-16">
-                    <p className="text-accent text-xs tracking-[0.16em] uppercase">
-                        authentication
-                    </p>
-
-                    <h1 className="text-foreground mt-3 text-2xl font-semibold">
-                        Session recovery failed
-                    </h1>
-
-                    <p className="text-muted mt-3 text-sm leading-6">{sessionError}</p>
-
-                    <button
-                        type="button"
-                        onClick={() => void recoverSession()}
-                        className="border-border text-foreground-secondary hover:border-accent/60 hover:text-accent focus-visible:ring-accent mt-8 cursor-pointer border px-4 py-2.5 text-sm transition-colors focus-visible:ring-2 focus-visible:outline-none"
-                    >
-                        Try again
-                    </button>
-                </div>
-            </section>
-        );
-    }
-
     if (status === 'authenticated') {
         return (
             <section className="flex w-full flex-1 items-center">
@@ -190,6 +168,31 @@ export function AuthForm({ mode }: AuthFormProps) {
                         : 'Create your Typing Analytics identity using email and password.'}
                 </p>
 
+                {status === 'error' ? (
+                    <div role="alert" className="border-border mt-6 border p-4">
+                        <p className="text-foreground text-sm font-semibold">
+                            Session recovery failed
+                        </p>
+
+                        <p className="text-muted mt-2 text-sm leading-6">
+                            {sessionError ??
+                                'Your previous authentication session could not be restored.'}
+                        </p>
+
+                        <p className="text-muted mt-2 text-sm leading-6">
+                            You can still sign in or create an account.
+                        </p>
+
+                        <button
+                            type="button"
+                            onClick={() => void recoverSession()}
+                            className="border-border text-foreground-secondary hover:text-accent focus-visible:ring-accent mt-4 cursor-pointer border px-4 py-2 text-sm focus-visible:ring-2 focus-visible:outline-none"
+                        >
+                            Try session recovery again
+                        </button>
+                    </div>
+                ) : null}
+
                 <form onSubmit={(event) => void handleSubmit(event)} className="mt-8 space-y-5">
                     <div>
                         <label
@@ -206,7 +209,14 @@ export function AuthForm({ mode }: AuthFormProps) {
                             required
                             maxLength={254}
                             value={email}
-                            aria-describedby={isRegister ? 'register-email-rule' : undefined}
+                            aria-describedby={
+                                [
+                                    isRegister ? 'register-email-rule' : null,
+                                    formError !== null ? `${mode}-form-error` : null,
+                                ]
+                                    .filter(Boolean)
+                                    .join(' ') || undefined
+                            }
                             onChange={(event) => {
                                 setEmail(event.target.value);
                                 setFormError(null);
@@ -238,7 +248,14 @@ export function AuthForm({ mode }: AuthFormProps) {
                                 minLength={8}
                                 maxLength={128}
                                 value={password}
-                                aria-describedby={isRegister ? 'register-password-rule' : undefined}
+                                aria-describedby={
+                                    [
+                                        isRegister ? 'register-password-rule' : null,
+                                        formError !== null ? `${mode}-form-error` : null,
+                                    ]
+                                        .filter(Boolean)
+                                        .join(' ') || undefined
+                                }
                                 onChange={(event) => {
                                     setPassword(event.target.value);
                                     setFormError(null);
@@ -276,7 +293,11 @@ export function AuthForm({ mode }: AuthFormProps) {
 
                     <div className="min-h-6">
                         {formError !== null ? (
-                            <p role="alert" className="text-danger text-sm leading-6">
+                            <p
+                                id={`${mode}-form-error`}
+                                role="alert"
+                                className="text-danger text-sm leading-6"
+                            >
                                 {formError}
                             </p>
                         ) : null}
@@ -295,7 +316,7 @@ export function AuthForm({ mode }: AuthFormProps) {
                     {isLogin ? 'Need an account?' : 'Already have an account?'}{' '}
                     <Link
                         href={isLogin ? '/register' : '/login'}
-                        className="text-foreground-secondary hover:text-accent focus-visible:text-accent transition-colors focus-visible:outline-none"
+                        className="text-foreground-secondary hover:text-accent focus-visible:text-accent focus-visible:ring-accent underline underline-offset-4 transition-colors focus-visible:ring-2 focus-visible:outline-none"
                     >
                         {isLogin ? 'Register' : 'Sign in'}
                     </Link>

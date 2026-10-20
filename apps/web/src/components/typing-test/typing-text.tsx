@@ -37,7 +37,8 @@ export function TypingText({ session }: TypingTextProps) {
     return (
         <p
             data-testid="typing-text"
-            className="w-full text-[1.45rem] leading-[1.9] tracking-[0.045em] whitespace-pre-wrap sm:text-[1.65rem] lg:text-[1.8rem]"
+            aria-hidden="true"
+            className="w-full min-w-0 text-xl leading-[1.9] tracking-[0.035em] wrap-anywhere whitespace-pre-wrap sm:text-[1.65rem] sm:tracking-[0.045em] lg:text-[1.8rem]"
         >
             {characters.map((character, position) => {
                 const visualState = getCharacterVisualState(session, position);

@@ -7,14 +7,36 @@ import { useTypingSession, type TypingError } from '@/hooks/use-typing-session';
 import { TypingResults } from './typing-results';
 import { TypingText } from './typing-text';
 
-function countLetters(text: string): number {
-    return Array.from(text).filter((character) => /\p{L}/u.test(character)).length;
+interface WordProgress {
+    readonly completedWords: number;
+    readonly totalWords: number;
 }
 
-function getCompletedLetters(targetText: string, currentPosition: number): number {
-    const completedText = Array.from(targetText).slice(0, currentPosition).join('');
+function getWordProgress(targetText: string, currentPosition: number): WordProgress {
+    const characters = Array.from(targetText);
 
-    return countLetters(completedText);
+    let completedWords = 0;
+    let totalWords = 0;
+    let insideWord = false;
+
+    for (let index = 0; index <= characters.length; index += 1) {
+        const character = characters[index];
+        const isBoundary = index === characters.length || /\s/u.test(character);
+
+        if (isBoundary && insideWord) {
+            totalWords += 1;
+
+            if (currentPosition >= index) {
+                completedWords += 1;
+            }
+
+            insideWord = false;
+        } else if (!isBoundary) {
+            insideWord = true;
+        }
+    }
+
+    return { completedWords, totalWords };
 }
 
 interface AsyncStateProps {
@@ -34,7 +56,7 @@ function AsyncState({ title, description, role, actionLabel, onAction }: AsyncSt
         >
             <p className="text-accent text-xs tracking-[0.16em] uppercase">typing session</p>
 
-            <h2 className="text-foreground mt-3 text-2xl font-semibold">{title}</h2>
+            <h1 className="text-foreground mt-3 text-2xl font-semibold">{title}</h1>
 
             <p className="text-muted mt-3 text-sm leading-6">{description}</p>
 
@@ -65,14 +87,18 @@ export function TypingTest() {
         if (status === 'ready' && session?.status === 'idle') {
             typingSurfaceRef.current?.focus();
         }
-    }, [session?.status, status]);
+
+        if (status === 'completed' && result !== null) {
+            document.getElementById('typing-results-title')?.focus();
+        }
+    }, [session?.status, status, result]);
 
     const totalCharacters = session === null ? 0 : Array.from(session.targetText).length;
 
-    const totalLetters = session === null ? 0 : countLetters(session.targetText);
-
-    const completedLetters =
-        session === null ? 0 : getCompletedLetters(session.targetText, session.currentPosition);
+    const { completedWords, totalWords } =
+        session === null
+            ? { completedWords: 0, totalWords: 0 }
+            : getWordProgress(session.targetText, session.currentPosition);
 
     return (
         <section className="flex w-full flex-1 items-center">
@@ -136,38 +162,49 @@ export function TypingTest() {
 
                 {status === 'ready' && session !== null ? (
                     <>
-                        <div className="mb-8 flex items-baseline gap-2 px-1">
+                        <h1 className="sr-only">Typing test</h1>
+
+                        <p className="sr-only">
+                            {completedWords} of {totalWords} words completed.
+                        </p>
+
+                        <div aria-hidden="true" className="mb-8 flex items-baseline gap-2 px-1">
                             <span
-                                data-testid="letter-progress"
+                                data-testid="word-progress"
                                 className="text-accent text-2xl leading-none font-medium sm:text-3xl"
                             >
-                                {completedLetters}
+                                {completedWords}
                             </span>
 
                             <span className="text-subtle text-sm">/</span>
 
-                            <span className="text-muted text-base sm:text-lg">{totalLetters}</span>
+                            <span className="text-muted text-base sm:text-lg">{totalWords}</span>
 
                             <span className="text-subtle ml-1 text-[11px] tracking-[0.18em] uppercase">
-                                letters
-                            </span>
-
-                            <span data-testid="current-position" className="sr-only">
-                                {session.currentPosition} / {totalCharacters}
+                                words
                             </span>
                         </div>
+
+                        <span data-testid="current-position" hidden>
+                            {session.currentPosition} / {totalCharacters}
+                        </span>
 
                         <div
                             ref={typingSurfaceRef}
                             data-testid="typing-surface"
+                            role="group"
                             tabIndex={0}
                             aria-label="Typing test input"
-                            aria-describedby="typing-instructions"
+                            aria-describedby="typing-instructions typing-target-readable"
                             onKeyDown={handleKeyDown}
                             onClick={() => typingSurfaceRef.current?.focus()}
                             className="w-full outline-none"
                         >
-                            <div className="px-1 py-4">
+                            <p id="typing-target-readable" className="sr-only">
+                                Target text: {session.targetText}
+                            </p>
+
+                            <div aria-hidden="true" className="px-1 py-4">
                                 <TypingText session={session} />
                             </div>
                         </div>

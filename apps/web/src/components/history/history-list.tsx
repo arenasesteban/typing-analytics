@@ -267,12 +267,12 @@ export function HistoryList() {
                                                 </time>
                                             </div>
 
-                                            <p className="text-subtle mt-2 pl-6 text-xs">
+                                            <p className="text-subtle mt-2 min-w-0 pl-6 text-xs break-all">
                                                 {session.id}
                                             </p>
                                         </div>
 
-                                        <dl className="grid grid-cols-3 gap-5 text-right">
+                                        <dl className="grid grid-cols-2 gap-x-3 gap-y-4 text-right sm:grid-cols-3 sm:gap-5">
                                             <HistoryMetric
                                                 label="wpm"
                                                 value={formatNumber(session.wpm)}
@@ -301,7 +301,7 @@ export function HistoryList() {
                 <nav
                     data-testid="history-pagination"
                     aria-label="History pagination"
-                    className="border-border mt-8 flex items-center justify-between border-t pt-6"
+                    className="border-border mt-8 flex flex-wrap items-center justify-between gap-3 border-t pt-6"
                 >
                     <button
                         type="button"

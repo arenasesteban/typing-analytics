@@ -1,4 +1,8 @@
+import { randomUUID } from 'node:crypto';
+
 import { expect, test } from '@playwright/test';
+
+test.use({ trace: 'off', screenshot: 'off', video: 'off' });
 
 interface CreatedSessionPayload {
     readonly id: string;
@@ -30,10 +34,13 @@ function isCreatedSessionPayload(value: unknown): value is CreatedSessionPayload
     );
 }
 
-test('registers, logs in, completes a typing test, verifies behavioral analytics in private history, and checks the dashboard', async ({
+test('Flow A: registers, logs in, completes a typing test, verifies behavioral analytics in private history, and checks the dashboard', async ({
     page,
-}, testInfo) => {
-    const email = `e2e-user-${String(testInfo.retry)}@example.com`;
+}) => {
+    // This end-to-end flow intentionally covers several asynchronous transitions.
+    test.setTimeout(90_000);
+
+    const email = `e2e-user-${randomUUID()}@example.com`;
 
     const password = 'TypingAnalyticsE2E!';
 
@@ -59,7 +66,10 @@ test('registers, logs in, completes a typing test, verifies behavioral analytics
 
     const registerResponse = await registerResponsePromise;
 
-    expect(registerResponse.ok()).toBe(true);
+    expect(
+        registerResponse.ok(),
+        `Registration returned HTTP ${String(registerResponse.status())}`,
+    ).toBe(true);
 
     await expect(page).toHaveURL(/\/$/);
 
@@ -71,12 +81,12 @@ test('registers, logs in, completes a typing test, verifies behavioral analytics
 
     await page
         .getByRole('button', {
-            name: 'Account menu',
+            name: /^Account menu\b/,
         })
         .click();
 
     await page
-        .getByRole('menuitem', {
+        .getByRole('button', {
             name: 'sign out',
         })
         .click();
@@ -116,7 +126,7 @@ test('registers, logs in, completes a typing test, verifies behavioral analytics
 
     const loginResponse = await loginResponsePromise;
 
-    expect(loginResponse.ok()).toBe(true);
+    expect(loginResponse.ok(), `Login returned HTTP ${String(loginResponse.status())}`).toBe(true);
 
     const createdSessionResponse = await createdSessionResponsePromise;
 
@@ -150,11 +160,19 @@ test('registers, logs in, completes a typing test, verifies behavioral analytics
 
     await typingSurface.press('Backspace');
 
-    // Complete the exact target assigned by the API.
+    const completionResponsePromise = page.waitForResponse(
+        (response) =>
+            new URL(response.url()).pathname === `/typing-sessions/${sessionId}/complete` &&
+            response.request().method() === 'POST',
+    );
 
     await typingSurface.pressSequentially(generatedTarget, {
         delay: 2,
     });
+
+    const completionResponse = await completionResponsePromise;
+
+    expect(completionResponse.status()).toBe(200);
 
     await expect(page.getByTestId('typing-results')).toBeVisible();
 
@@ -203,37 +221,31 @@ test('registers, logs in, completes a typing test, verifies behavioral analytics
 
     await page
         .getByRole('button', {
-            name: 'Account menu',
+            name: /^Account menu\b/,
         })
         .click();
 
-    await Promise.all([
-        page.waitForURL(/\/history$/, {
-            timeout: 30_000,
-        }),
-        page
-            .getByRole('menuitem', {
-                name: 'history',
-            })
-            .click(),
-    ]);
+    await page.getByRole('link', { name: 'history' }).click();
 
-    await expect(page).toHaveURL(/\/history$/);
+    await expect(page).toHaveURL((url) => url.pathname === '/history', {
+        timeout: 30_000,
+    });
+
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
 
     const historyItem = page.getByTestId(`history-item-${sessionId}`);
 
     await expect(historyItem).toBeVisible();
 
-    await Promise.all([
-        page.waitForURL(new RegExp(`/history/${sessionId}$`), {
-            timeout: 30_000,
-        }),
-        page
-            .getByRole('link', {
-                name: `Open session ${sessionId}`,
-            })
-            .click(),
-    ]);
+    await page
+        .getByRole('link', {
+            name: `Open session ${sessionId}`,
+        })
+        .click();
+
+    await expect(page).toHaveURL((url) => url.pathname === `/history/${sessionId}`, {
+        timeout: 30_000,
+    });
 
     const detail = page.getByTestId('history-detail');
 

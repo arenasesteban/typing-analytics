@@ -252,12 +252,12 @@ describe('browser authentication flows', () => {
 
         await user.click(
             await screen.findByRole('button', {
-                name: 'Account menu',
+                name: /^Account menu\b/,
             }),
         );
 
         await user.click(
-            screen.getByRole('menuitem', {
+            screen.getByRole('button', {
                 name: 'sign out',
             }),
         );

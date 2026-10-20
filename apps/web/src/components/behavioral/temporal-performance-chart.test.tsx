@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 
 import type { SessionBehavioralResult } from '@typing-analytics/typing-core';
@@ -25,6 +26,42 @@ describe('TemporalPerformanceChart', () => {
         ).toHaveLength(2);
 
         expect(screen.getByTestId('chart-sample-count')).toHaveTextContent('2 temporal samples');
+    });
+
+    it('exposes numerical equivalents for the temporal chart', async () => {
+        const user = userEvent.setup();
+
+        render(<TemporalPerformanceChart temporal={TEMPORAL} />);
+
+        expect(
+            screen.getByRole('heading', {
+                name: 'Temporal performance',
+                level: 2,
+            }),
+        ).toBeInTheDocument();
+
+        const toggle = screen.getByText('View temporal speed values');
+
+        expect(toggle).toBeInTheDocument();
+
+        await user.click(toggle);
+
+        const table = screen.getByRole('table', {
+            name: 'Temporal WPM and Raw WPM measurements',
+        });
+
+        expect(table).toBeVisible();
+        expect(table.querySelectorAll('tbody tr')).toHaveLength(TEMPORAL.points.length);
+        expect(table).toHaveTextContent('1.00 s');
+        expect(table).toHaveTextContent('1.25 s');
+        expect(table).toHaveTextContent('24');
+        expect(table).toHaveTextContent('28');
+        expect(table).toHaveTextContent('30');
+        expect(table).toHaveTextContent('36');
+
+        const svg = screen.getByTestId('chart-wpm-curve').closest('svg');
+        expect(svg).toHaveAttribute('aria-hidden', 'true');
+        expect(svg).toHaveAttribute('focusable', 'false');
     });
 
     it('includes the exact fractional final sample', () => {
