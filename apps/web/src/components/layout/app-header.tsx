@@ -1,7 +1,6 @@
 'use client';
 
 import {
-    IconActivity,
     IconBrandGithub,
     IconChevronDown,
     IconHistory,
@@ -23,6 +22,7 @@ export function AppHeader() {
     const [isLoggingOut, setIsLoggingOut] = useState(false);
 
     const accountMenuRef = useRef<HTMLDivElement>(null);
+    const accountMenuTriggerRef = useRef<HTMLButtonElement>(null);
 
     useEffect(() => {
         function handlePointerDown(event: PointerEvent): void {
@@ -40,9 +40,16 @@ export function AppHeader() {
         }
 
         function handleKeyDown(event: KeyboardEvent): void {
-            if (event.key === 'Escape') {
-                setIsAccountMenuOpen(false);
+            if (
+                event.key !== 'Escape' ||
+                !isAccountMenuOpen ||
+                !accountMenuRef.current?.contains(document.activeElement)
+            ) {
+                return;
             }
+
+            setIsAccountMenuOpen(false);
+            accountMenuTriggerRef.current?.focus();
         }
 
         document.addEventListener('pointerdown', handlePointerDown);
@@ -54,7 +61,7 @@ export function AppHeader() {
 
             document.removeEventListener('keydown', handleKeyDown);
         };
-    }, []);
+    }, [isAccountMenuOpen]);
 
     async function handleLogout(): Promise<void> {
         setIsAccountMenuOpen(false);
@@ -97,10 +104,10 @@ export function AppHeader() {
                         <div ref={accountMenuRef} className="relative">
                             <button
                                 type="button"
-                                aria-label="Account menu"
-                                aria-haspopup="menu"
+                                aria-label={`Account menu ${user.email}`}
                                 aria-expanded={isAccountMenuOpen}
                                 aria-controls="account-menu"
+                                ref={accountMenuTriggerRef}
                                 onClick={() => {
                                     setIsAccountMenuOpen((current) => !current);
                                 }}
@@ -125,32 +132,17 @@ export function AppHeader() {
                             {isAccountMenuOpen ? (
                                 <div
                                     id="account-menu"
-                                    role="menu"
-                                    aria-label="Account menu"
+                                    hidden={!isAccountMenuOpen}
                                     className="border-border-strong bg-background absolute top-full right-0 z-50 mt-2 min-w-48 border p-1 shadow-[0_16px_40px_rgba(0,0,0,0.45)]"
                                 >
                                     <Link
-                                        href="/dashboard"
-                                        role="menuitem"
-                                        onClick={() => {
-                                            setIsAccountMenuOpen(false);
-                                        }}
-                                        className="text-muted hover:bg-surface-raised hover:text-accent focus-visible:bg-surface-raised focus-visible:text-accent flex items-center gap-2.5 px-3 py-2 text-xs tracking-[0.04em] transition-colors focus-visible:outline-none"
-                                    >
-                                        <IconActivity size={15} stroke={1.75} aria-hidden="true" />
-                                        <span>dashboard</span>
-                                    </Link>
-
-                                    <Link
                                         href="/history"
-                                        role="menuitem"
                                         onClick={() => {
                                             setIsAccountMenuOpen(false);
                                         }}
-                                        className="text-muted hover:bg-surface-raised hover:text-accent focus-visible:bg-surface-raised focus-visible:text-accent flex items-center gap-2.5 px-3 py-2 text-xs tracking-[0.04em] transition-colors focus-visible:outline-none"
+                                        className="text-muted hover:bg-surface-raised hover:text-accent focus-visible:bg-surface-raised focus-visible:ring-accent flex items-center gap-2.5 px-3 py-2 text-xs tracking-[0.04em] transition-colors focus-visible:ring-2 focus-visible:outline-none"
                                     >
                                         <IconHistory size={15} stroke={1.75} aria-hidden="true" />
-
                                         <span>history</span>
                                     </Link>
 
@@ -161,13 +153,11 @@ export function AppHeader() {
 
                                     <button
                                         type="button"
-                                        role="menuitem"
                                         disabled={isLoggingOut}
                                         onClick={() => void handleLogout()}
-                                        className="text-muted hover:bg-surface-raised hover:text-accent focus-visible:bg-surface-raised focus-visible:text-accent flex w-full cursor-pointer items-center gap-2.5 px-3 py-2 text-left text-xs tracking-[0.04em] transition-colors focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                                        className="text-muted hover:bg-surface-raised hover:text-accent focus-visible:bg-surface-raised focus-visible:ring-accent flex w-full cursor-pointer items-center gap-2.5 px-3 py-2 text-left text-xs tracking-[0.04em] transition-colors focus-visible:ring-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
                                     >
                                         <IconLogout size={15} stroke={1.75} aria-hidden="true" />
-
                                         <span>{isLoggingOut ? 'signing out…' : 'sign out'}</span>
                                     </button>
                                 </div>

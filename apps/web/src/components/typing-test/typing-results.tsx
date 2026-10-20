@@ -80,12 +80,13 @@ export function TypingResults({ summary, persisted, temporal, onRestart }: Typin
                     </p>
                 </div>
 
-                <h2
+                <h1
                     id="typing-results-title"
+                    tabIndex={-1}
                     className="text-foreground mt-3 text-2xl font-semibold"
                 >
                     Results
-                </h2>
+                </h1>
             </header>
 
             <div

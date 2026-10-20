@@ -34,12 +34,18 @@ export default function RootLayout({ children }: LayoutProps) {
             className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
         >
             <body className="min-h-full">
+                <a
+                    href="#main-content"
+                    className="bg-background text-foreground focus-visible:ring-accent fixed top-3 left-3 z-100 -translate-y-24 border border-current px-4 py-2 text-sm opacity-0 transition-none focus:translate-y-0 focus:opacity-100 focus-visible:ring-2 focus-visible:outline-none"
+                >
+                    Skip to main content
+                </a>
                 <AuthProvider>
                     <div className="flex min-h-screen flex-col">
                         <AppHeader />
-
-                        <main className="flex flex-1">{children}</main>
-
+                        <main id="main-content" tabIndex={-1} className="flex flex-1">
+                            {children}
+                        </main>
                         <AppFooter />
                     </div>
                 </AuthProvider>

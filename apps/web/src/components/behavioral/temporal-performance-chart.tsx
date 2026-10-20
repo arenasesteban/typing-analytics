@@ -98,7 +98,7 @@ export function TemporalPerformanceChart({
                     compact ? 'flex flex-wrap items-center justify-between gap-x-6 gap-y-2' : ''
                 }
             >
-                <h3
+                <h2
                     id="temporal-performance-title"
                     className={
                         compact
@@ -107,7 +107,7 @@ export function TemporalPerformanceChart({
                     }
                 >
                     Temporal performance
-                </h3>
+                </h2>
 
                 {compact ? <ChartLegend compact /> : null}
 
@@ -153,8 +153,8 @@ export function TemporalPerformanceChart({
                 <svg
                     viewBox={`0 0 ${String(VIEW_WIDTH)} ${String(VIEW_HEIGHT)}`}
                     preserveAspectRatio="none"
-                    role="img"
-                    aria-label="Two cumulative speed curves, WPM and Raw WPM, over elapsed time. Vertical axis: WPM. Horizontal axis: seconds."
+                    aria-hidden="true"
+                    focusable="false"
                     className={`block w-full ${chartHeightClass}`}
                 >
                     {TICK_INDICES.map((index) => {
@@ -223,6 +223,43 @@ export function TemporalPerformanceChart({
                     ) : null}
                 </div>
             </div>
+
+            <details className="border-border mt-5 border-t pt-4">
+                <summary className="text-foreground-secondary focus-visible:ring-accent w-fit cursor-pointer text-sm underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:outline-none">
+                    View temporal speed values
+                </summary>
+
+                <div className="mt-4 overflow-x-auto">
+                    <table className="w-full border-collapse text-left text-sm">
+                        <caption className="sr-only">Temporal WPM and Raw WPM measurements</caption>
+                        <thead>
+                            <tr className="border-border border-b">
+                                <th scope="col" className="px-3 py-2 font-semibold">
+                                    Elapsed time
+                                </th>
+                                <th scope="col" className="px-3 py-2 font-semibold">
+                                    WPM
+                                </th>
+                                <th scope="col" className="px-3 py-2 font-semibold">
+                                    Raw WPM
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {points.map((point) => (
+                                <tr
+                                    key={point.elapsedMs}
+                                    className="border-border border-b last:border-b-0"
+                                >
+                                    <td className="px-3 py-2">{formatElapsed(point.elapsedMs)}</td>
+                                    <td className="px-3 py-2">{point.wpm}</td>
+                                    <td className="px-3 py-2">{point.rawWpm}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            </details>
         </section>
     );
 }

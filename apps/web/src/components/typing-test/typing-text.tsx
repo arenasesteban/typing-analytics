@@ -37,6 +37,7 @@ export function TypingText({ session }: TypingTextProps) {
     return (
         <p
             data-testid="typing-text"
+            aria-hidden="true"
             className="w-full text-[1.45rem] leading-[1.9] tracking-[0.045em] whitespace-pre-wrap sm:text-[1.65rem] lg:text-[1.8rem]"
         >
             {characters.map((character, position) => {

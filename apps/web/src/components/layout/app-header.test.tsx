@@ -49,42 +49,43 @@ describe('AppHeader account menu', () => {
 
         render(<AppHeader />);
 
+        const trigger = screen.getByRole('button', {
+            name: /^Account menu\b/,
+        });
+
+        expect(trigger).toHaveAttribute('aria-expanded', 'false');
+
+        expect(document.getElementById('account-menu')).toBeNull();
+
         expect(
-            screen.queryByRole('menuitem', {
+            screen.queryByRole('link', {
                 name: 'history',
             }),
         ).not.toBeInTheDocument();
 
         expect(
-            screen.queryByRole('menuitem', {
+            screen.queryByRole('button', {
                 name: 'sign out',
             }),
         ).not.toBeInTheDocument();
-
-        const trigger = screen.getByRole('button', {
-            name: 'Account menu',
-        });
-
-        expect(trigger).toHaveAttribute('aria-expanded', 'false');
 
         await user.click(trigger);
 
         expect(trigger).toHaveAttribute('aria-expanded', 'true');
 
+        const menu = document.getElementById('account-menu');
+
+        expect(menu).not.toBeNull();
+        expect(menu).toBeVisible();
+
         expect(
-            screen.getByRole('menu', {
-                name: 'Account menu',
+            screen.getByRole('link', {
+                name: 'history',
             }),
-        ).toBeInTheDocument();
-
-        const historyItem = screen.getByRole('menuitem', {
-            name: 'history',
-        });
-
-        expect(historyItem).toHaveAttribute('href', '/history');
+        ).toHaveAttribute('href', '/history');
 
         expect(
-            screen.getByRole('menuitem', {
+            screen.getByRole('button', {
                 name: 'sign out',
             }),
         ).toBeInTheDocument();
@@ -92,33 +93,59 @@ describe('AppHeader account menu', () => {
 
     it('does not expose the account menu to unauthenticated users', () => {
         authState.status = 'unauthenticated';
-
         authState.user = null;
 
         render(<AppHeader />);
 
-        expect(
-            screen.queryByRole('button', {
-                name: 'Account menu',
-            }),
-        ).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Account menu' })).not.toBeInTheDocument();
+        expect(screen.queryByRole('link', { name: 'history' })).not.toBeInTheDocument();
+        expect(document.getElementById('account-menu')).toBeNull();
 
-        expect(
-            screen.queryByRole('menuitem', {
-                name: 'history',
-            }),
-        ).not.toBeInTheDocument();
+        expect(screen.getByRole('link', { name: 'sign in' })).toHaveAttribute('href', '/login');
+        expect(screen.getByRole('link', { name: 'register' })).toHaveAttribute('href', '/register');
+    });
 
-        expect(
-            screen.getByRole('link', {
-                name: 'sign in',
-            }),
-        ).toHaveAttribute('href', '/login');
+    it('closes the account disclosure with Escape and restores focus', async () => {
+        const user = userEvent.setup();
 
-        expect(
-            screen.getByRole('link', {
-                name: 'register',
-            }),
-        ).toHaveAttribute('href', '/register');
+        render(<AppHeader />);
+
+        const trigger = screen.getByRole('button', {
+            name: /^Account menu\b/,
+        });
+
+        await user.click(trigger);
+
+        const historyLink = screen.getByRole('link', {
+            name: 'history',
+        });
+
+        historyLink.focus();
+        expect(historyLink).toHaveFocus();
+
+        await user.keyboard('{Escape}');
+
+        expect(trigger).toHaveAttribute('aria-expanded', 'false');
+        expect(trigger).toHaveFocus();
+        expect(screen.queryByRole('link', { name: 'history' })).not.toBeInTheDocument();
+    });
+
+    it('allows ordinary Tab navigation through account actions', async () => {
+        const user = userEvent.setup();
+
+        render(<AppHeader />);
+
+        const trigger = screen.getByRole('button', {
+            name: /^Account menu\b/,
+        });
+
+        await user.click(trigger);
+        trigger.focus();
+
+        await user.tab();
+        expect(screen.getByRole('link', { name: 'history' })).toHaveFocus();
+
+        await user.tab();
+        expect(screen.getByRole('button', { name: 'sign out' })).toHaveFocus();
     });
 });

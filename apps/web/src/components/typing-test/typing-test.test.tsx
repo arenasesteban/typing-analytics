@@ -148,6 +148,55 @@ describe('TypingTest persistent session integration', () => {
         });
     });
 
+    it('exposes an accessible typing region and complete target', async () => {
+        fetchMock.mockResolvedValueOnce(jsonResponse(CREATED_SESSION, 201));
+
+        render(<TypingTest />);
+
+        const surface = await screen.findByRole('group', {
+            name: 'Typing test input',
+        });
+
+        expect(surface).toHaveAttribute('tabindex', '0');
+        expect(surface).toHaveAttribute(
+            'aria-describedby',
+            'typing-instructions typing-target-readable',
+        );
+
+        expect(screen.getByRole('heading', { level: 1, name: 'Typing test' })).toBeInTheDocument();
+        expect(screen.getByText(`Target text: ${SERVER_TEXT}`)).toBeInTheDocument();
+        expect(screen.getByTestId('typing-text')).toHaveAttribute('aria-hidden', 'true');
+    });
+
+    it('counts completed words and decreases the count after Backspace', async () => {
+        const multiWordSession = {
+            ...CREATED_SESSION,
+            typingText: {
+                ...CREATED_SESSION.typingText,
+                text: 'cat dog',
+            },
+        };
+
+        fetchMock.mockResolvedValueOnce(jsonResponse(multiWordSession, 201));
+
+        const user = userEvent.setup();
+
+        render(<TypingTest />);
+
+        expect(await screen.findByTestId('word-progress')).toHaveTextContent('0');
+        expect(screen.getByText('0 of 2 words completed.')).toBeInTheDocument();
+
+        await typeAttempt(user, 'cat');
+
+        expect(screen.getByTestId('word-progress')).toHaveTextContent('1');
+        expect(screen.getByText('1 of 2 words completed.')).toBeInTheDocument();
+
+        await user.keyboard('{Backspace}');
+
+        expect(screen.getByTestId('word-progress')).toHaveTextContent('0');
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
     it('preserves incorrect input and Backspace behavior without remote keystroke requests', async () => {
         fetchMock.mockResolvedValueOnce(jsonResponse(CREATED_SESSION, 201));
 
@@ -250,6 +299,29 @@ describe('TypingTest persistent session integration', () => {
         expect(screen.getByTestId('persistence-status')).toHaveTextContent('completed');
 
         expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+
+    it('moves focus to validated results after completion', async () => {
+        fetchMock
+            .mockResolvedValueOnce(jsonResponse(CREATED_SESSION, 201))
+            .mockResolvedValueOnce(jsonResponse(COMPLETED_SESSION, 200));
+
+        const user = userEvent.setup();
+
+        render(<TypingTest />);
+
+        await typeAttempt(user, SERVER_TEXT);
+
+        const heading = await screen.findByRole('heading', {
+            level: 1,
+            name: 'Results',
+        });
+
+        expect(heading).toHaveAttribute('tabindex', '-1');
+
+        await waitFor(() => {
+            expect(heading).toHaveFocus();
+        });
     });
 
     it('shows persistence loading until the server validates the completed session', async () => {
