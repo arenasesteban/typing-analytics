@@ -163,7 +163,10 @@ function TrendChart({ label, values, icon: TrendIcon }: TrendChartProps) {
     const coordinates = getChartCoordinates(values);
 
     return (
-        <figure aria-labelledby={captionId} className="border-border bg-surface border p-4 sm:p-5">
+        <figure
+            aria-labelledby={captionId}
+            className="border-border bg-surface min-w-0 border p-4 sm:p-5"
+        >
             <figcaption
                 id={captionId}
                 className="text-foreground-secondary flex items-center gap-2 text-sm font-medium"
@@ -446,7 +449,12 @@ export function HistoricalDashboard() {
                                     Numerical representation of the same trend data shown above.
                                 </p>
 
-                                <div className="border-border mt-5 overflow-x-auto border">
+                                <div
+                                    role="region"
+                                    aria-label="Historical values table"
+                                    tabIndex={0}
+                                    className="border-border focus-visible:ring-accent mt-5 max-w-full overflow-x-auto border focus-visible:ring-2 focus-visible:outline-none"
+                                >
                                     <table
                                         data-testid="dashboard-history-table"
                                         className="w-full min-w-lg border-collapse text-left text-sm"
@@ -459,21 +467,21 @@ export function HistoricalDashboard() {
                                             <tr className="border-border bg-surface border-b">
                                                 <th
                                                     scope="col"
-                                                    className="text-muted px-4 py-3 text-xs font-medium tracking-[0.1em] uppercase"
+                                                    className="text-muted px-4 py-3 text-xs font-medium tracking-widest uppercase"
                                                 >
                                                     Completed
                                                 </th>
 
                                                 <th
                                                     scope="col"
-                                                    className="text-muted px-4 py-3 text-xs font-medium tracking-[0.1em] uppercase"
+                                                    className="text-muted px-4 py-3 text-xs font-medium tracking-widest uppercase"
                                                 >
                                                     WPM
                                                 </th>
 
                                                 <th
                                                     scope="col"
-                                                    className="text-muted px-4 py-3 text-xs font-medium tracking-[0.1em] uppercase"
+                                                    className="text-muted px-4 py-3 text-xs font-medium tracking-widest uppercase"
                                                 >
                                                     Accuracy
                                                 </th>

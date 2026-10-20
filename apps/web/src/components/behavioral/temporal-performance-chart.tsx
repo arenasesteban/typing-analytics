@@ -229,8 +229,13 @@ export function TemporalPerformanceChart({
                     View temporal speed values
                 </summary>
 
-                <div className="mt-4 overflow-x-auto">
-                    <table className="w-full border-collapse text-left text-sm">
+                <div
+                    role="region"
+                    aria-label="Temporal speed values table"
+                    tabIndex={0}
+                    className="focus-visible:ring-accent mt-4 max-w-full overflow-x-auto focus-visible:ring-2 focus-visible:outline-none"
+                >
+                    <table className="w-full min-w-76 border-collapse text-left text-sm">
                         <caption className="sr-only">Temporal WPM and Raw WPM measurements</caption>
                         <thead>
                             <tr className="border-border border-b">

@@ -79,7 +79,7 @@ export function AppHeader() {
 
     return (
         <header className="border-border border-b">
-            <div className="mx-auto flex min-h-14 w-full max-w-350 flex-wrap items-center justify-between gap-3 px-4 py-2 sm:flex-nowrap sm:px-6 lg:px-10">
+            <div className="mx-auto flex min-h-14 w-full max-w-350 flex-wrap items-center justify-between gap-x-3 gap-y-2 px-4 py-2 sm:px-6 lg:px-10">
                 <Link href="/" className="flex min-w-0 items-center gap-3">
                     <span
                         aria-hidden="true"
@@ -93,7 +93,7 @@ export function AppHeader() {
 
                 <nav
                     aria-label="Application links"
-                    className="flex items-center justify-end gap-2 text-xs sm:gap-3"
+                    className="ml-auto flex max-w-full min-w-0 flex-wrap items-center justify-end gap-2 text-xs sm:gap-3"
                 >
                     {status === 'loading' ? (
                         <span role="status" aria-live="polite" className="text-subtle px-2">
@@ -116,7 +116,7 @@ export function AppHeader() {
                             >
                                 <IconUser size={16} stroke={1.75} aria-hidden="true" />
 
-                                <span className="hidden max-w-52 truncate sm:inline">
+                                <span className="hidden max-w-28 min-w-0 truncate sm:block md:max-w-52">
                                     {user.email}
                                 </span>
 
