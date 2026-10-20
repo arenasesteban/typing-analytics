@@ -143,6 +143,9 @@ describe('AppHeader account menu', () => {
         trigger.focus();
 
         await user.tab();
+        expect(screen.getByRole('link', { name: 'dashboard' })).toHaveFocus();
+
+        await user.tab();
         expect(screen.getByRole('link', { name: 'history' })).toHaveFocus();
 
         await user.tab();

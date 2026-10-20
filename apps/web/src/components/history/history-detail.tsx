@@ -230,7 +230,7 @@ export function HistoryDetail({ sessionId }: HistoryDetailProps) {
         <section className="flex w-full flex-1">
             <div
                 data-testid="history-detail"
-                className="mx-auto w-full max-w-5xl px-6 py-12 lg:px-10 lg:py-16"
+                className="mx-auto w-full max-w-6xl px-6 py-12 lg:px-10 lg:py-16"
             >
                 <Link
                     href="/history"
