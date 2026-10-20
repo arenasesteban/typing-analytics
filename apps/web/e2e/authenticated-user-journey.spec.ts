@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto';
 
 import { expect, test } from '@playwright/test';
 
+test.use({ trace: 'off', screenshot: 'off', video: 'off' });
+
 interface CreatedSessionPayload {
     readonly id: string;
     readonly typingText: {
@@ -32,7 +34,7 @@ function isCreatedSessionPayload(value: unknown): value is CreatedSessionPayload
     );
 }
 
-test('registers, logs in, completes a typing test, verifies behavioral analytics in private history, and checks the dashboard', async ({
+test('Flow A: registers, logs in, completes a typing test, verifies behavioral analytics in private history, and checks the dashboard', async ({
     page,
 }) => {
     // This end-to-end flow intentionally covers several asynchronous transitions.
@@ -158,11 +160,19 @@ test('registers, logs in, completes a typing test, verifies behavioral analytics
 
     await typingSurface.press('Backspace');
 
-    // Complete the exact target assigned by the API.
+    const completionResponsePromise = page.waitForResponse(
+        (response) =>
+            new URL(response.url()).pathname === `/typing-sessions/${sessionId}/complete` &&
+            response.request().method() === 'POST',
+    );
 
     await typingSurface.pressSequentially(generatedTarget, {
         delay: 2,
     });
+
+    const completionResponse = await completionResponsePromise;
+
+    expect(completionResponse.status()).toBe(200);
 
     await expect(page.getByTestId('typing-results')).toBeVisible();
 

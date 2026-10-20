@@ -2,12 +2,20 @@ import { randomUUID } from 'node:crypto';
 
 import { expect, test, type Page } from '@playwright/test';
 
+const E2E_API_URL = 'http://localhost:3003';
+
 const VIEWPORTS = [
     { label: 'narrow mobile', width: 320, height: 720 },
     { label: 'standard mobile', width: 375, height: 812 },
     { label: 'tablet', width: 768, height: 1024 },
     { label: 'desktop', width: 1280, height: 800 },
 ] as const;
+
+test.use({
+    trace: 'off',
+    screenshot: 'off',
+    video: 'off',
+});
 
 async function expectNoDocumentOverflow(page: Page): Promise<void> {
     const dimensions = await page.evaluate(() => ({
@@ -30,15 +38,25 @@ async function expectNoDocumentOverflow(page: Page): Promise<void> {
 async function registerE2EUser(page: Page): Promise<void> {
     await page.goto('/register');
 
-    await page.getByLabel('Email').fill(`responsive-${randomUUID()}@example.com`);
+    await page.getByLabel('Email', { exact: true }).fill(`responsive-${randomUUID()}@example.com`);
 
     await page.getByLabel('Password', { exact: true }).fill('correct-horse-battery-staple');
 
+    const registrationResponsePromise = page.waitForResponse(
+        (response) =>
+            new URL(response.url()).pathname === '/auth/register' &&
+            response.request().method() === 'POST',
+    );
+
     await page.getByRole('button', { name: 'Create account' }).click();
+
+    const response = await registrationResponsePromise;
+
+    expect(response.ok()).toBe(true);
 
     await expect(
         page.getByRole('button', {
-            name: /^Account menu\b/,
+            name: /^Account menu\b/u,
         }),
     ).toBeVisible();
 }
@@ -49,8 +67,8 @@ test.describe('Responsive application layouts', () => {
 
         for (const route of routes) {
             await page.setViewportSize({
-                width: VIEWPORTS[0].width,
-                height: VIEWPORTS[0].height,
+                width: 320,
+                height: 720,
             });
 
             await page.goto(route);
@@ -67,16 +85,26 @@ test.describe('Responsive application layouts', () => {
                     }
 
                     if (route === '/login') {
-                        await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible();
+                        await expect(
+                            page.getByRole('heading', {
+                                name: 'Sign in',
+                            }),
+                        ).toBeVisible();
 
                         await expect(page.getByLabel('Email')).toBeVisible();
 
-                        await expect(page.getByLabel('Password', { exact: true })).toBeVisible();
+                        await expect(
+                            page.getByLabel('Password', {
+                                exact: true,
+                            }),
+                        ).toBeVisible();
                     }
 
                     if (route === '/register') {
                         await expect(
-                            page.getByRole('heading', { name: 'Create account' }),
+                            page.getByRole('heading', {
+                                name: 'Create account',
+                            }),
                         ).toBeVisible();
 
                         await expect(page.getByLabel('Email')).toBeVisible();
@@ -97,7 +125,7 @@ test.describe('Responsive application layouts', () => {
         await registerE2EUser(page);
 
         const accountButton = page.getByRole('button', {
-            name: /^Account menu\b/,
+            name: /^Account menu\b/u,
         });
 
         for (const viewport of VIEWPORTS) {
@@ -111,27 +139,29 @@ test.describe('Responsive application layouts', () => {
 
                 await accountButton.click();
 
-                const accountMenu = page.locator('#account-menu');
+                const menu = page.locator('#account-menu');
 
-                await expect(accountMenu).toBeVisible();
+                await expect(menu).toBeVisible();
 
-                const menuBounds = await accountMenu.boundingBox();
+                const bounds = await menu.boundingBox();
 
-                expect(menuBounds).not.toBeNull();
+                expect(bounds).not.toBeNull();
 
-                if (menuBounds !== null) {
-                    expect(menuBounds.x).toBeGreaterThanOrEqual(-1);
+                if (bounds !== null) {
+                    expect(bounds.x).toBeGreaterThanOrEqual(-1);
 
-                    expect(menuBounds.x + menuBounds.width).toBeLessThanOrEqual(viewport.width + 1);
+                    expect(bounds.x + bounds.width).toBeLessThanOrEqual(viewport.width + 1);
                 }
 
                 await accountButton.click();
+
+                await expect(menu).toBeHidden();
             });
         }
 
         await page.setViewportSize({
-            width: VIEWPORTS[0].width,
-            height: VIEWPORTS[0].height,
+            width: 320,
+            height: 720,
         });
 
         await page.goto('/dashboard');
@@ -156,13 +186,13 @@ test.describe('Responsive application layouts', () => {
         }
 
         await page.setViewportSize({
-            width: VIEWPORTS[0].width,
-            height: VIEWPORTS[0].height,
+            width: 320,
+            height: 720,
         });
 
         await page.goto('/history');
 
-        await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+        await expect(page.getByTestId('history-empty')).toBeVisible();
 
         for (const viewport of VIEWPORTS) {
             await test.step(`empty history fits ${viewport.label}`, async () => {
@@ -179,6 +209,8 @@ test.describe('Responsive application layouts', () => {
     test('completed session and historical data remain usable on narrow mobile', async ({
         page,
     }) => {
+        test.setTimeout(180_000);
+
         await page.setViewportSize({
             width: 320,
             height: 720,
@@ -186,63 +218,187 @@ test.describe('Responsive application layouts', () => {
 
         await registerE2EUser(page);
 
-        await expect(page.getByTestId('typing-surface')).toBeVisible();
+        const surface = page.getByTestId('typing-surface');
 
-        const targetContent = await page.locator('#typing-target-readable').textContent();
+        await expect(surface).toBeVisible();
 
-        expect(targetContent).not.toBeNull();
+        const target = await page.getByTestId('typing-text').textContent();
 
-        const target = (targetContent ?? '').replace(/^\s*Target text:\s*/u, '').trim();
+        if (target === null || target.length === 0) {
+            throw new Error('No generated typing target was available');
+        }
 
-        expect(target.length).toBeGreaterThan(0);
+        const completionResponsePromise = page.waitForResponse(
+            (response) => {
+                const url = new URL(response.url());
 
-        await page.getByTestId('typing-surface').focus();
+                return (
+                    url.origin === E2E_API_URL &&
+                    /^\/typing-sessions\/[^/]+\/complete$/u.test(url.pathname) &&
+                    response.request().method() === 'POST'
+                );
+            },
+            { timeout: 90_000 },
+        );
 
-        await page.keyboard.type(target, {
+        await surface.pressSequentially(target, {
             delay: 20,
         });
 
-        await expect(page.getByTestId('typing-results')).toBeVisible({ timeout: 90_000 });
+        const completionResponse = await completionResponsePromise;
+
+        expect(completionResponse.status()).toBe(200);
+
+        const sessionId = new URL(completionResponse.url()).pathname.match(
+            /^\/typing-sessions\/([^/]+)\/complete$/u,
+        )?.[1];
+
+        if (sessionId === undefined) {
+            throw new Error('Completed session ID is unavailable');
+        }
+
+        await expect(page.getByTestId('typing-results')).toBeVisible();
 
         await expect(page.getByTestId('result-wpm')).toHaveText(/\d+/u);
 
-        await expect(page.getByRole('button', { name: 'Restart test' })).toBeVisible();
+        await expect(
+            page.getByRole('button', {
+                name: 'Restart test',
+            }),
+        ).toBeVisible();
 
         await expectNoDocumentOverflow(page);
 
-        await page.goto('/dashboard');
+        await test.step('Verify the populated dashboard', async () => {
+            await page
+                .getByRole('button', {
+                    name: /^Account menu\b/u,
+                })
+                .click();
 
-        await expect(page.getByTestId('dashboard-data')).toBeVisible();
+            await page
+                .getByRole('link', {
+                    name: 'dashboard',
+                    exact: true,
+                })
+                .click();
 
-        await expect(page.getByTestId('dashboard-history-row').first()).toBeVisible();
+            await expect(page).toHaveURL((url) => url.pathname === '/dashboard');
 
-        await expectNoDocumentOverflow(page);
+            await expect(page.getByTestId('dashboard-data')).toBeVisible();
 
-        const tableRegion = page.getByRole('region', {
-            name: 'Historical values table',
+            await expect(page.getByTestId('dashboard-session-count')).toHaveText('1');
+
+            await expect(page.getByTestId('dashboard-history-row')).toHaveCount(1);
+
+            await expectNoDocumentOverflow(page);
+
+            const tableRegion = page.getByRole('region', {
+                name: 'Historical values table',
+            });
+
+            await expect(tableRegion).toBeVisible();
+
+            const dimensions = await tableRegion.evaluate((element) => ({
+                clientWidth: element.clientWidth,
+                scrollWidth: element.scrollWidth,
+            }));
+
+            expect(dimensions.scrollWidth).toBeGreaterThan(dimensions.clientWidth);
+
+            await tableRegion.focus();
+
+            await tableRegion.press('ArrowRight');
+
+            await expect
+                .poll(() => tableRegion.evaluate((element) => element.scrollLeft))
+                .toBeGreaterThan(0);
         });
 
-        await expect(tableRegion).toBeVisible();
+        await test.step('Verify the populated history', async () => {
+            await page
+                .getByRole('button', {
+                    name: /^Account menu\b/u,
+                })
+                .click();
 
-        const dimensions = await tableRegion.evaluate((element) => ({
-            clientWidth: element.clientWidth,
-            scrollWidth: element.scrollWidth,
-        }));
+            await page
+                .getByRole('link', {
+                    name: 'history',
+                    exact: true,
+                })
+                .click();
 
-        expect(dimensions.scrollWidth).toBeGreaterThan(dimensions.clientWidth);
+            await expect(page).toHaveURL((url) => url.pathname === '/history');
 
-        await tableRegion.focus();
-        await tableRegion.press('ArrowRight');
+            await expect(page.getByTestId(`history-item-${sessionId}`)).toBeVisible();
 
-        await expect
-            .poll(() => tableRegion.evaluate((element) => element.scrollLeft))
-            .toBeGreaterThan(0);
+            await expectNoDocumentOverflow(page);
+        });
 
-        await page.goto('/history');
+        await test.step('Verify the session detail and temporal chart', async () => {
+            await page
+                .getByRole('link', {
+                    name: `Open session ${sessionId}`,
+                })
+                .click();
 
-        await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+            await expect(page.getByTestId('history-detail')).toBeVisible();
 
-        await expectNoDocumentOverflow(page);
+            await expect(page.getByTestId('history-detail-target')).toHaveText(target);
+
+            await expectNoDocumentOverflow(page);
+
+            const chart = page.getByTestId('temporal-performance-chart');
+
+            const pending = page.getByTestId('history-behavioral-pending');
+
+            await expect
+                .poll(
+                    async () => {
+                        if (await chart.isVisible()) {
+                            return true;
+                        }
+
+                        if (await pending.isVisible()) {
+                            await page
+                                .getByRole('button', {
+                                    name: 'Check again',
+                                })
+                                .click();
+                        }
+
+                        return false;
+                    },
+                    {
+                        intervals: [1_000, 2_000],
+                        timeout: 45_000,
+                    },
+                )
+                .toBe(true);
+
+            await expect(chart).toBeVisible();
+
+            await expectNoDocumentOverflow(page);
+
+            await page.getByText('View temporal speed values').click();
+
+            const tableRegion = page.getByRole('region', {
+                name: 'Temporal speed values table',
+            });
+
+            await expect(tableRegion).toBeVisible();
+
+            const table = tableRegion.getByRole('table', {
+                name: 'Temporal WPM and Raw WPM measurements',
+            });
+
+            await expect(table).toBeVisible();
+
+            expect(await table.locator('tbody tr').count()).toBeGreaterThan(0);
+
+            await expectNoDocumentOverflow(page);
+        });
     });
 
     test('registration remains usable after real refresh rate limiting', async ({ page }) => {
@@ -279,7 +435,11 @@ test.describe('Responsive application layouts', () => {
 
         expect(refreshResponse.status()).toBe(429);
 
-        await expect(page.getByRole('heading', { name: 'Create account' })).toBeVisible();
+        await expect(
+            page.getByRole('heading', {
+                name: 'Create account',
+            }),
+        ).toBeVisible();
 
         await expect(page.getByLabel('Email')).toBeVisible();
 
@@ -289,15 +449,21 @@ test.describe('Responsive application layouts', () => {
             }),
         ).toContainText('Session recovery failed');
 
-        await page.getByLabel('Email').fill(`rate-limit-${randomUUID()}@example.com`);
+        await page
+            .getByLabel('Email', { exact: true })
+            .fill(`rate-limit-${randomUUID()}@example.com`);
 
         await page.getByLabel('Password', { exact: true }).fill('correct-horse-battery-staple');
 
-        await page.getByRole('button', { name: 'Create account' }).click();
+        await page
+            .getByRole('button', {
+                name: 'Create account',
+            })
+            .click();
 
         await expect(
             page.getByRole('button', {
-                name: /^Account menu\b/,
+                name: /^Account menu\b/u,
             }),
         ).toBeVisible();
     });

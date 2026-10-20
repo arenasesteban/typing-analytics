@@ -1,6 +1,13 @@
+import { randomUUID } from 'node:crypto';
+
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
-import { randomUUID } from 'node:crypto';
+
+test.use({
+    trace: 'off',
+    screenshot: 'off',
+    video: 'off',
+});
 
 async function auditPage(page: Page): Promise<void> {
     const results = await new AxeBuilder({ page })
@@ -31,11 +38,16 @@ test.describe('Cross-route accessibility', () => {
             }),
         ).toBeAttached();
 
-        await expect(
-            page.getByRole('group', {
-                name: 'Typing test input',
-            }),
-        ).toBeAttached();
+        await expect(page.getByRole('main')).toBeAttached();
+
+        const typingSurface = page.getByRole('group', {
+            name: 'Typing test input',
+        });
+
+        await expect(typingSurface).toBeVisible();
+        await expect(typingSurface).toHaveAttribute('tabindex', '0');
+
+        await expect(page.locator('#typing-target-readable')).toContainText('Target text:');
 
         await auditPage(page);
     });
@@ -46,23 +58,24 @@ test.describe('Cross-route accessibility', () => {
         await expect(
             page.getByRole('heading', {
                 name: 'Sign in',
+                level: 1,
             }),
         ).toBeVisible();
 
         await page.keyboard.press('Tab');
 
-        await expect(
-            page.getByRole('link', {
-                name: 'Skip to main content',
-            }),
-        ).toBeFocused();
+        const skipLink = page.getByRole('link', {
+            name: 'Skip to main content',
+        });
+
+        await expect(skipLink).toBeFocused();
 
         await page.keyboard.press('Enter');
 
         await expect(page.locator('#main-content')).toBeFocused();
     });
 
-    for (const route of ['/login', '/register']) {
+    for (const route of ['/login', '/register'] as const) {
         test(`${route} has no automated WCAG A/AA violations`, async ({ page }) => {
             await page.goto(route);
 
@@ -72,6 +85,10 @@ test.describe('Cross-route accessibility', () => {
                 }),
             ).toBeVisible();
 
+            await expect(page.getByLabel('Email', { exact: true })).toBeVisible();
+
+            await expect(page.getByLabel('Password', { exact: true })).toBeVisible();
+
             await auditPage(page);
         });
     }
@@ -79,7 +96,7 @@ test.describe('Cross-route accessibility', () => {
     test('private dashboard and history have accessible structures', async ({ page }) => {
         await page.goto('/register');
 
-        await page.getByLabel('Email').fill(`a11y-${randomUUID()}@example.com`);
+        await page.getByLabel('Email', { exact: true }).fill(`a11y-${randomUUID()}@example.com`);
 
         await page.getByLabel('Password', { exact: true }).fill('correct-horse-battery-staple');
 
@@ -96,6 +113,7 @@ test.describe('Cross-route accessibility', () => {
         await expect(
             page.getByRole('heading', {
                 name: 'Historical performance',
+                level: 1,
             }),
         ).toBeVisible();
 
@@ -104,6 +122,8 @@ test.describe('Cross-route accessibility', () => {
         await auditPage(page);
 
         await page.goto('/history');
+
+        await expect(page.getByTestId('history-empty')).toBeVisible();
 
         await expect(
             page.getByRole('heading', {
