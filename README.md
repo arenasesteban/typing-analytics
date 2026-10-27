@@ -411,7 +411,7 @@ pnpm db:reset
 
 GitHub Actions validates pull requests and pushes to `main`.
 
-The pipeline contains three complementary gates:
+The pipeline contains four complementary gates:
 
 ```text
 Validate
@@ -432,9 +432,15 @@ Authenticated Full-Stack E2E
 ├── NestJS API
 ├── Next.js application
 └── Chromium / Playwright
+
+Production Container Delivery
+├── production image builds
+├── isolated PostgreSQL and MongoDB
+├── committed migrations and service readiness
+└── full-stack smoke validation
 ```
 
-The full-stack E2E job uses the same `pnpm test:e2e` entry point available for local development.
+The full-stack E2E job uses the same `pnpm test:e2e` entry point available for local development. Container delivery uses the existing Docker Compose configuration and `scripts/delivery-smoke.mjs` to validate production artifacts in CI.
 
 ## Project status
 

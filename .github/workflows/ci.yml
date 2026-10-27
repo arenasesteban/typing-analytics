@@ -45,7 +45,6 @@ jobs:
     api-integration:
         name: API / PostgreSQL + MongoDB Integration
         runs-on: ubuntu-latest
-
         env:
             NODE_ENV: test
             DATABASE_URL: postgresql://typing_analytics:typing_analytics_test_ci@localhost:5432/typing_analytics_test?schema=public
@@ -134,3 +133,58 @@ jobs:
                   name: playwright-report
                   path: apps/web/playwright-report/
                   retention-days: 14
+
+    container-delivery:
+        name: Production Container Delivery
+        runs-on: ubuntu-latest
+        timeout-minutes: 40
+        env:
+            COMPOSE_PROJECT_NAME: typing-analytics-delivery-ci
+
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v7
+
+            - name: Setup Node.js for smoke validation
+              uses: actions/setup-node@v7
+              with:
+                  node-version: 24.21.0
+                  package-manager-cache: false
+
+            - name: Generate ephemeral delivery secret
+              shell: bash
+              run: |
+                  secret="$(openssl rand -hex 48)"
+                  echo "::add-mask::$secret"
+                  echo "JWT_ACCESS_SECRET=$secret" >> "$GITHUB_ENV"
+
+            - name: Validate Compose configuration
+              run: docker compose --profile delivery config --quiet
+
+            - name: Build production application images
+              run: docker compose --profile delivery build api-migrate api web
+
+            - name: Start containerized full stack
+              run: |
+                  docker compose --profile delivery up \
+                    -d --no-build --wait --wait-timeout 180 api web
+
+            - name: Verify repeatable database migrations
+              run: docker compose --profile delivery run --rm --no-deps api-migrate
+
+            - name: Run full-stack delivery smoke
+              run: node scripts/delivery-smoke.mjs
+
+            - name: Inspect delivery failures
+              if: ${{ failure() }}
+              run: |
+                  docker compose --profile delivery ps --all || true
+                  docker compose --profile delivery logs \
+                    --no-color --tail 100 \
+                    postgres mongo api-migrate api web || true
+
+            - name: Remove isolated delivery infrastructure
+              if: ${{ always() }}
+              run: |
+                  docker compose --profile delivery down \
+                    --volumes --remove-orphans
