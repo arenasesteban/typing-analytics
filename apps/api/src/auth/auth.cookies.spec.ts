@@ -5,9 +5,13 @@ import { describe, expect, it, vi } from 'vitest';
 import { clearRefreshTokenCookie, setRefreshTokenCookie } from './auth.cookies.js';
 import { MILLISECONDS_PER_DAY, REFRESH_COOKIE_NAME } from './auth.constants.js';
 
-function createConfig(nodeEnvironment: 'development' | 'test' | 'production'): ConfigService {
+function createConfig(
+    nodeEnvironment: 'development' | 'test' | 'production',
+    localContainerDelivery = false,
+): ConfigService {
     return new ConfigService({
         NODE_ENV: nodeEnvironment,
+        LOCAL_CONTAINER_DELIVERY: localContainerDelivery,
         REFRESH_TOKEN_TTL_DAYS: 30,
     });
 }
@@ -85,4 +89,38 @@ describe('Refresh cookie security', () => {
             );
         },
     );
+
+    it('uses a non-Secure HttpOnly refresh cookie for local production delivery', () => {
+        const { response, cookie } = createResponseMock();
+
+        setRefreshTokenCookie(response, 'test-refresh-token', createConfig('production', true));
+
+        expect(cookie).toHaveBeenCalledWith(
+            REFRESH_COOKIE_NAME,
+            'test-refresh-token',
+            expect.objectContaining({
+                httpOnly: true,
+                secure: false,
+                sameSite: 'lax',
+                path: '/auth',
+                maxAge: 30 * MILLISECONDS_PER_DAY,
+            }),
+        );
+    });
+
+    it('clears local production refresh cookies with matching attributes', () => {
+        const { response, clearCookie } = createResponseMock();
+
+        clearRefreshTokenCookie(response, createConfig('production', true));
+
+        expect(clearCookie).toHaveBeenCalledWith(
+            REFRESH_COOKIE_NAME,
+            expect.objectContaining({
+                httpOnly: true,
+                secure: false,
+                sameSite: 'lax',
+                path: '/auth',
+            }),
+        );
+    });
 });

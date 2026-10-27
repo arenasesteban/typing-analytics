@@ -336,4 +336,102 @@ describe('validateEnvironment', () => {
             expect((error as Error).message).not.toContain(secret);
         }
     });
+
+    it('accepts explicit local container delivery in production', () => {
+        const config = validateEnvironment({
+            ...VALID_CONFIG,
+            NODE_ENV: 'production',
+            WEB_ORIGIN: 'http://localhost:3000',
+            LOCAL_CONTAINER_DELIVERY: 'true',
+        });
+
+        expect(config['NODE_ENV']).toBe('production');
+        expect(config['WEB_ORIGIN']).toBe('http://localhost:3000');
+        expect(config['LOCAL_CONTAINER_DELIVERY']).toBe(true);
+    });
+
+    it('defaults local container delivery to false', () => {
+        const config = validateEnvironment({
+            ...VALID_CONFIG,
+            NODE_ENV: 'production',
+            WEB_ORIGIN: 'https://app.example.com',
+            LOCAL_CONTAINER_DELIVERY: undefined,
+        });
+
+        expect(config['LOCAL_CONTAINER_DELIVERY']).toBe(false);
+    });
+
+    it('rejects HTTP production origins without local delivery', () => {
+        expect(() =>
+            validateEnvironment({
+                ...VALID_CONFIG,
+                NODE_ENV: 'production',
+                WEB_ORIGIN: 'http://localhost:3000',
+                LOCAL_CONTAINER_DELIVERY: 'false',
+            }),
+        ).toThrow('WEB_ORIGIN must be a non-local HTTPS origin in production');
+    });
+
+    it('rejects external HTTP origins in local container delivery', () => {
+        expect(() =>
+            validateEnvironment({
+                ...VALID_CONFIG,
+                NODE_ENV: 'production',
+                WEB_ORIGIN: 'http://app.example.com',
+                LOCAL_CONTAINER_DELIVERY: 'true',
+            }),
+        ).toThrow('WEB_ORIGIN must be a loopback HTTP origin for local container delivery');
+    });
+
+    it('rejects external HTTPS origins in local container delivery', () => {
+        expect(() =>
+            validateEnvironment({
+                ...VALID_CONFIG,
+                NODE_ENV: 'production',
+                WEB_ORIGIN: 'https://app.example.com',
+                LOCAL_CONTAINER_DELIVERY: 'true',
+            }),
+        ).toThrow('WEB_ORIGIN must be a loopback HTTP origin for local container delivery');
+    });
+
+    it('rejects wildcard bind addresses in local delivery', () => {
+        expect(() =>
+            validateEnvironment({
+                ...VALID_CONFIG,
+                NODE_ENV: 'production',
+                WEB_ORIGIN: 'http://0.0.0.0:3000',
+                LOCAL_CONTAINER_DELIVERY: 'true',
+            }),
+        ).toThrow('WEB_ORIGIN must be a loopback HTTP origin for local container delivery');
+    });
+
+    it('rejects local delivery outside production', () => {
+        expect(() =>
+            validateEnvironment({
+                ...VALID_CONFIG,
+                NODE_ENV: 'development',
+                LOCAL_CONTAINER_DELIVERY: 'true',
+            }),
+        ).toThrow('LOCAL_CONTAINER_DELIVERY requires NODE_ENV=production');
+    });
+
+    it('rejects an invalid local delivery flag', () => {
+        expect(() =>
+            validateEnvironment({
+                ...VALID_CONFIG,
+                LOCAL_CONTAINER_DELIVERY: 'enabled',
+            }),
+        ).toThrow('LOCAL_CONTAINER_DELIVERY must be true or false');
+    });
+
+    it('requires an explicit origin for local production delivery', () => {
+        expect(() =>
+            validateEnvironment({
+                ...VALID_CONFIG,
+                NODE_ENV: 'production',
+                WEB_ORIGIN: undefined,
+                LOCAL_CONTAINER_DELIVERY: 'true',
+            }),
+        ).toThrow('WEB_ORIGIN is required in production');
+    });
 });

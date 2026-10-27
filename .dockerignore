@@ -1,0 +1,31 @@
+# Dependencies and build outputs
+**/node_modules
+**/dist
+**/.next
+**/coverage
+**/*.tsbuildinfo
+.pnpm-store
+
+# Generated artifacts from the host
+apps/api/src/generated/prisma
+
+# Local environments and credentials
+**/.env
+**/.env.*
+**/*.pem
+**/*.key
+
+# Git and editor files
+.git
+.github
+.vscode
+.idea
+
+# Test output
+**/test-results
+**/playwright-report
+**/blob-report
+
+# Operating system files
+**/.DS_Store
+**/Thumbs.db

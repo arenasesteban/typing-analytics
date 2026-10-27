@@ -51,7 +51,15 @@ function isLocalHostname(hostname: string): boolean {
     );
 }
 
-function normalizeWebOrigin(value: unknown, environment: NodeEnvironment): string {
+function isLoopbackHostname(hostname: string): boolean {
+    return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]';
+}
+
+function normalizeWebOrigin(
+    value: unknown,
+    environment: NodeEnvironment,
+    localContainerDelivery: boolean,
+): string {
     const candidate =
         typeof value === 'string' && value.trim().length > 0
             ? value.trim()
@@ -82,11 +90,16 @@ function normalizeWebOrigin(value: unknown, environment: NodeEnvironment): strin
         throw new Error('WEB_ORIGIN must be a valid HTTP or HTTPS origin');
     }
 
-    if (
-        environment === 'production' &&
-        (parsedOrigin.protocol !== 'https:' || isLocalHostname(parsedOrigin.hostname))
-    ) {
-        throw new Error('WEB_ORIGIN must be a non-local HTTPS origin in production');
+    if (environment === 'production') {
+        if (localContainerDelivery) {
+            if (parsedOrigin.protocol !== 'http:' || !isLoopbackHostname(parsedOrigin.hostname)) {
+                throw new Error(
+                    'WEB_ORIGIN must be a loopback HTTP origin for local container delivery',
+                );
+            }
+        } else if (parsedOrigin.protocol !== 'https:' || isLocalHostname(parsedOrigin.hostname)) {
+            throw new Error('WEB_ORIGIN must be a non-local HTTPS origin in production');
+        }
     }
 
     return parsedOrigin.origin;
@@ -157,6 +170,12 @@ function validateMongoDatabaseName(value: string): string {
 export function validateEnvironment(config: Record<string, unknown>): Record<string, unknown> {
     const nodeEnvironment = normalizeNodeEnvironment(config['NODE_ENV']);
 
+    const localContainerDelivery = parseBoolean(config, 'LOCAL_CONTAINER_DELIVERY', false);
+
+    if (localContainerDelivery && nodeEnvironment !== 'production') {
+        throw new Error('LOCAL_CONTAINER_DELIVERY requires NODE_ENV=production');
+    }
+
     const databaseUrl = validatePostgresUrl(requireNonEmptyString(config, 'DATABASE_URL'));
     const mongoUrl = validateMongoUrl(requireNonEmptyString(config, 'MONGODB_URL'));
     const mongoDatabase = validateMongoDatabaseName(requireNonEmptyString(config, 'MONGODB_DB'));
@@ -183,7 +202,12 @@ export function validateEnvironment(config: Record<string, unknown>): Record<str
         NODE_ENV: nodeEnvironment,
         DATABASE_URL: databaseUrl,
         PORT: parseInteger(portConfig, 'PORT', 1, 65535),
-        WEB_ORIGIN: normalizeWebOrigin(config['WEB_ORIGIN'], nodeEnvironment),
+        WEB_ORIGIN: normalizeWebOrigin(
+            config['WEB_ORIGIN'],
+            nodeEnvironment,
+            localContainerDelivery,
+        ),
+        LOCAL_CONTAINER_DELIVERY: localContainerDelivery,
         JWT_ACCESS_SECRET: jwtAccessSecret,
         JWT_ACCESS_TTL_SECONDS: parseInteger(config, 'JWT_ACCESS_TTL_SECONDS', 60, 3600),
         REFRESH_TOKEN_TTL_DAYS: parseInteger(config, 'REFRESH_TOKEN_TTL_DAYS', 1, 90),

@@ -4,9 +4,12 @@ import type { CookieOptions, Request, Response } from 'express';
 import { MILLISECONDS_PER_DAY, REFRESH_COOKIE_NAME } from './auth.constants.js';
 
 function getBaseRefreshCookieOptions(configService: ConfigService): CookieOptions {
+    const environment = configService.get<string>('NODE_ENV');
+    const localContainerDelivery = configService.get<boolean>('LOCAL_CONTAINER_DELIVERY') === true;
+
     return {
         httpOnly: true,
-        secure: configService.get<string>('NODE_ENV') === 'production',
+        secure: environment === 'production' && !localContainerDelivery,
         sameSite: 'lax',
         path: '/auth',
     };

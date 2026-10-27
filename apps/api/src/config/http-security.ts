@@ -6,6 +6,9 @@ const HSTS_MAX_AGE_SECONDS = 31_536_000;
 export function configureHttpSecurity(app: INestApplication, configService: ConfigService): void {
     const environment = configService.getOrThrow<string>('NODE_ENV');
     const allowedOrigin = configService.getOrThrow<string>('WEB_ORIGIN');
+    const localContainerDelivery = configService.get<boolean>('LOCAL_CONTAINER_DELIVERY') === true;
+
+    const secureProduction = environment === 'production' && !localContainerDelivery;
 
     app.useSecurityHeaders({
         contentSecurityPolicy: false,
@@ -16,13 +19,12 @@ export function configureHttpSecurity(app: INestApplication, configService: Conf
         xFrameOptions: {
             action: 'deny',
         },
-        strictTransportSecurity:
-            environment === 'production'
-                ? {
-                      maxAge: HSTS_MAX_AGE_SECONDS,
-                      includeSubDomains: false,
-                  }
-                : false,
+        strictTransportSecurity: secureProduction
+            ? {
+                  maxAge: HSTS_MAX_AGE_SECONDS,
+                  includeSubDomains: false,
+              }
+            : false,
     });
 
     app.enableCors({
