@@ -96,6 +96,80 @@ services:
             timeout: 5s
             retries: 10
 
+    api-migrate:
+        profiles:
+            - delivery
+        image: typing-analytics-api-migrate:local
+        build:
+            context: .
+            dockerfile: apps/api/Dockerfile
+            target: migrate
+        environment:
+            DATABASE_URL: postgresql://typing_analytics:typing_analytics_local@postgres:5432/typing_analytics?schema=public
+        depends_on:
+            postgres:
+                condition: service_healthy
+        restart: 'no'
+
+    api:
+        profiles:
+            - delivery
+        image: typing-analytics-api:local
+        build:
+            context: .
+            dockerfile: apps/api/Dockerfile
+            target: runtime
+        environment:
+            NODE_ENV: production
+            PORT: '3001'
+            LOCAL_CONTAINER_DELIVERY: 'true'
+            WEB_ORIGIN: http://localhost:3000
+            DATABASE_URL: postgresql://typing_analytics:typing_analytics_local@postgres:5432/typing_analytics?schema=public
+            MONGODB_URL: mongodb://mongo:27017
+            MONGODB_DB: typing_analytics
+            JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-}
+            JWT_ACCESS_TTL_SECONDS: '900'
+            REFRESH_TOKEN_TTL_DAYS: '30'
+            EVENT_DELIVERY_AUTOSTART: 'true'
+        ports:
+            - '127.0.0.1:3001:3001'
+        depends_on:
+            postgres:
+                condition: service_healthy
+            mongo:
+                condition: service_healthy
+            api-migrate:
+                condition: service_completed_successfully
+        healthcheck:
+            test:
+                - CMD
+                - node
+                - -e
+                - "fetch('http://127.0.0.1:3001/health/ready').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
+            interval: 5s
+            timeout: 5s
+            retries: 20
+            start_period: 20s
+        restart: unless-stopped
+
+    web:
+        profiles:
+            - delivery
+        image: typing-analytics-web:local
+        build:
+            context: .
+            dockerfile: apps/web/Dockerfile
+            target: runtime
+            args:
+                NEXT_PUBLIC_API_BASE_URL: http://localhost:3001
+                LOCAL_CONTAINER_DELIVERY: 'true'
+        ports:
+            - '127.0.0.1:3000:3000'
+        depends_on:
+            api:
+                condition: service_healthy
+        restart: unless-stopped
+
 volumes:
     postgres_data:
     mongo_data:

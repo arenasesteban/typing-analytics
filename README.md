@@ -87,7 +87,7 @@ PostgreSQL remains the authoritative datastore for authentication, session owner
 ├── docs/
 │   └── adr/                  # Architecture Decision Records
 │
-├── compose.yaml              # Local PostgreSQL and MongoDB environments
+├── compose.yaml              # Local infrastructure and full-stack delivery
 ├── package.json
 └── pnpm-workspace.yaml
 ```
@@ -155,6 +155,34 @@ API         http://localhost:3001
 PostgreSQL  localhost:5433
 MongoDB     localhost:27017
 ```
+
+### Full-stack Docker delivery
+
+Alternatively, run the complete application using production containers for Next.js and NestJS, alongside PostgreSQL and MongoDB.
+
+Create a root `.env` file from `.env.example` and configure a unique, cryptographically secure `JWT_ACCESS_SECRET`.
+
+Build and start the application:
+
+```bash
+docker compose --profile delivery up -d --build --wait api web
+```
+
+The web application is available at `http://localhost:3000`, with the API at `http://localhost:3001`. Committed Prisma migrations are applied before API startup.
+
+Verify the containerized application:
+
+```bash
+node scripts/delivery-smoke.mjs
+```
+
+Stop the environment without removing persistent database volumes:
+
+```bash
+docker compose --profile delivery down
+```
+
+Local HTTP delivery is restricted to loopback addresses; external production continues to require HTTPS.
 
 ## Authentication and persistence model
 
