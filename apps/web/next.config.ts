@@ -1,3 +1,5 @@
+import path from 'node:path';
+
 import type { NextConfig } from 'next';
 
 import { validateWebDeliveryConfig } from './src/config/delivery-config';
@@ -12,6 +14,9 @@ const { localContainerDelivery } = validateWebDeliveryConfig(
 );
 
 const nextConfig: NextConfig = {
+    output: 'standalone',
+    outputFileTracingRoot: path.join(__dirname, '../..'),
+    transpilePackages: ['@typing-analytics/typing-core'],
     poweredByHeader: false,
     headers: () =>
         Promise.resolve(getWebSecurityHeaderRules(isProduction && !localContainerDelivery)),
