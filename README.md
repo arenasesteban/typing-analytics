@@ -444,4 +444,4 @@ The full-stack E2E job uses the same `pnpm test:e2e` entry point available for l
 
 ## Project status
 
-Current development stage: **v0.7.0 — Reproducible Delivery (in progress)**
+Current development stage: **v0.8.0 — Public Deployment (in progress)**
