@@ -1,6 +1,6 @@
 # ADR-003 — Free-Tier Public Deployment Architecture for Typing Analytics
 
-**Status:** Proposed  
+**Status:** Accepted  
 **Scope:** Public Portfolio Deployment
 
 ## 1. Context
