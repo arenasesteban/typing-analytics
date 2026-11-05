@@ -1,0 +1,142 @@
+name: CD
+
+on:
+    workflow_dispatch:
+        inputs:
+            expected_sha:
+                description: Full SHA of the approved main revision
+                required: true
+                type: string
+            confirm:
+                description: Authorize production database migrations
+                required: true
+                type: boolean
+                default: false
+
+    workflow_call:
+        inputs:
+            expected_sha:
+                required: true
+                type: string
+            confirm:
+                required: true
+                type: boolean
+
+permissions:
+    contents: read
+
+jobs:
+    authorize:
+        name: Authorize revision
+        runs-on: ubuntu-latest
+
+        steps:
+            - name: Verify deployment authorization
+              shell: bash
+              env:
+                  REQUESTED_SHA: ${{ inputs.expected_sha }}
+                  WORKFLOW_SHA: ${{ github.sha }}
+                  WORKFLOW_REF: ${{ github.ref }}
+                  CONFIRMED: ${{ inputs.confirm }}
+              run: |
+                  set -euo pipefail
+
+                  if [[ "$WORKFLOW_REF" != "refs/heads/main" ]]; then
+                    echo "::error::Only main can migrate production."
+                    exit 1
+                  fi
+
+                  if [[ "$CONFIRMED" != "true" ]]; then
+                    echo "::error::Explicit authorization is required."
+                    exit 1
+                  fi
+
+                  if [[ ! "$REQUESTED_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+                    echo "::error::A full commit SHA is required."
+                    exit 1
+                  fi
+
+                  if [[ "$REQUESTED_SHA" != "$WORKFLOW_SHA" ]]; then
+                    echo "::error::Requested SHA differs from the workflow revision."
+                    exit 1
+                  fi
+
+                  echo "Authorized revision: $WORKFLOW_SHA"
+
+    migrate:
+        name: Migrate Neon PostgreSQL
+        needs: authorize
+        runs-on: ubuntu-latest
+        timeout-minutes: 15
+
+        concurrency:
+            group: typing-analytics-production-database
+            cancel-in-progress: false
+
+        environment:
+            name: production
+
+        steps:
+            - name: Checkout authorized revision
+              uses: actions/checkout@v7
+              with:
+                  ref: ${{ inputs.expected_sha }}
+                  persist-credentials: false
+
+            - name: Setup pnpm and Node.js
+              uses: pnpm/setup@v3
+              with:
+                  runtime: node@24.21.0
+                  cache: true
+                  require-lockfile: true
+
+            - name: Check migration credentials
+              shell: bash
+              env:
+                  DATABASE_URL: ${{ secrets.NEON_MIGRATION_DATABASE_URL }}
+              run: |
+                  set -euo pipefail
+
+                  if [[ -z "$DATABASE_URL" ]]; then
+                    echo "::error::Migration database secret is missing."
+                    exit 1
+                  fi
+
+            - name: Validate Prisma schema
+              env:
+                  DATABASE_URL: ${{ secrets.NEON_MIGRATION_DATABASE_URL }}
+              run: >-
+                  pnpm --filter @typing-analytics/api
+                  exec prisma validate --config prisma7.config.ts
+
+            - name: Apply committed migrations
+              id: deploy
+              env:
+                  DATABASE_URL: ${{ secrets.NEON_MIGRATION_DATABASE_URL }}
+              run: pnpm --filter @typing-analytics/api prisma:migrate:deploy
+
+            - name: Verify migration status
+              id: status
+              env:
+                  DATABASE_URL: ${{ secrets.NEON_MIGRATION_DATABASE_URL }}
+              run: >-
+                  pnpm --filter @typing-analytics/api
+                  exec prisma migrate status --config prisma7.config.ts
+
+            - name: Record execution result
+              if: always()
+              shell: bash
+              env:
+                  REVISION: ${{ github.sha }}
+                  EXECUTION_STATUS: ${{ job.status }}
+                  MIGRATION_OUTCOME: ${{ steps.deploy.outcome }}
+                  STATUS_OUTCOME: ${{ steps.status.outcome }}
+              run: |
+                  {
+                    echo "## Production database migration"
+                    echo ""
+                    echo "- Revision: \`$REVISION\`"
+                    echo "- Result: \`$EXECUTION_STATUS\`"
+                    echo "- Migration: \`$MIGRATION_OUTCOME\`"
+                    echo "- Status verification: \`$STATUS_OUTCOME\`"
+                  } >> "$GITHUB_STEP_SUMMARY"

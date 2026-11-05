@@ -96,6 +96,26 @@ jobs:
             - name: Apply database migrations
               run: pnpm --filter @typing-analytics/api prisma:migrate:integration
 
+            - name: Verify database migration status
+              run: >-
+                  pnpm --filter @typing-analytics/api
+                  exec prisma migrate status --config prisma7.integration.config.ts
+
+            - name: Reject unavailable migration database
+              shell: bash
+              run: |
+                  set -euo pipefail
+
+                  unavailable_url="postgresql://test:test@127.0.0.1:59999/unavailable?schema=public&connect_timeout=3"
+
+                  if DATABASE_URL="$unavailable_url" \
+                    pnpm --filter @typing-analytics/api prisma:migrate:integration; then
+                    echo "::error::Migration unexpectedly succeeded."
+                    exit 1
+                  fi
+
+                  echo "Unavailable database was correctly rejected."
+
             - name: Run API integration tests
               run: pnpm --filter @typing-analytics/api test:integration
 
