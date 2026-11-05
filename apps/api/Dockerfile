@@ -101,3 +101,9 @@ COPY --from=builder --chown=node:node \
 USER node
 
 ENTRYPOINT ["./node_modules/.bin/prisma", "migrate", "deploy", "--config", "prisma7.config.ts"]
+
+# ------------------------------------------------------------
+# Render: explicit, one-off Nest Rspack renderer
+# ------------------------------------------------------------
+
+FROM runtime AS render
