@@ -268,6 +268,28 @@ jobs:
                     --environment=production \
                     --token="$VERCEL_TOKEN"
 
+                  # Normalize local-only delivery configuration for public production.
+                  node <<'NODE'
+                  const fs = require('node:fs');
+
+                  const file = '.vercel/.env.production.local';
+                  const lines = fs.readFileSync(file, 'utf8').split(/\r?\n/);
+
+                  const retained = lines.filter(
+                    (line) => !/^\s*(?:export\s+)?LOCAL_CONTAINER_DELIVERY\s*=/.test(line)
+                  );
+
+                  console.log(
+                    retained.length === lines.length
+                      ? 'Local delivery variable absent from Vercel pull.'
+                      : 'Local delivery variable found in Vercel pull.'
+                  );
+
+                  retained.push('LOCAL_CONTAINER_DELIVERY=false');
+
+                  fs.writeFileSync(file, `${retained.join('\n')}\n`);
+                  NODE
+
                   vercel build --prod \
                     --token="$VERCEL_TOKEN"
 
