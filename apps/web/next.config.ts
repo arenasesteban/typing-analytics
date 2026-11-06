@@ -11,6 +11,7 @@ const { localContainerDelivery } = validateWebDeliveryConfig(
     process.env.NEXT_PUBLIC_API_BASE_URL,
     process.env.NODE_ENV,
     process.env.LOCAL_CONTAINER_DELIVERY,
+    process.env.API_UPSTREAM_ORIGIN,
 );
 
 const nextConfig: NextConfig = {
