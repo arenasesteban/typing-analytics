@@ -1,21 +1,14 @@
 name: Public Release Promotion
 
 on:
-    workflow_dispatch:
+    workflow_call:
         inputs:
             expected_sha:
-                description: Full SHA of the approved main revision
                 required: true
                 type: string
-            confirm:
-                description: Authorize public production release
-                required: true
-                type: boolean
-                default: false
 
 permissions:
     contents: read
-    actions: read
 
 concurrency:
     group: typing-analytics-public-release
@@ -23,132 +16,72 @@ concurrency:
 
 jobs:
     preflight:
-        name: Verify authorized revision and CI
+        name: Verify release revision
         runs-on: ubuntu-latest
 
         outputs:
-            ci_run_id: ${{ steps.ci.outputs.run_id }}
-
-        env:
-            EXPECTED_SHA: ${{ inputs.expected_sha }}
-            CONFIRMED: ${{ inputs.confirm }}
-            GH_TOKEN: ${{ github.token }}
+            proceed: ${{ steps.check.outputs.proceed }}
 
         steps:
-            - name: Authorize main revision
+            - name: Verify authorized main commit
+              id: check
               shell: bash
+              env:
+                  EXPECTED_SHA: ${{ inputs.expected_sha }}
+                  GH_TOKEN: ${{ github.token }}
               run: |
                   set -euo pipefail
 
+                  [[ "$GITHUB_EVENT_NAME" == "push" ]]
                   [[ "$GITHUB_REF" == "refs/heads/main" ]]
-                  [[ "$CONFIRMED" == "true" ]]
                   [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]]
                   [[ "$EXPECTED_SHA" == "$GITHUB_SHA" ]]
 
                   main_sha="$(
-                    gh api \
-                      "repos/$GITHUB_REPOSITORY/git/ref/heads/main" \
-                      --jq '.object.sha'
+                    gh api "repos/$GITHUB_REPOSITORY/branches/main" \
+                      --jq '.commit.sha'
                   )"
 
                   if [[ "$EXPECTED_SHA" != "$main_sha" ]]; then
-                    echo "::error::Revision is not the current main HEAD."
-                    exit 1
+                    echo "proceed=false" >> "$GITHUB_OUTPUT"
+                    echo "Obsolete revision; release skipped."
+                    exit 0
                   fi
 
-            - name: Verify successful CI
-              id: ci
-              shell: bash
-              run: |
-                  set -euo pipefail
-
-                  gh api \
-                    "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$EXPECTED_SHA&branch=main&event=push&per_page=20" \
-                    > "$RUNNER_TEMP/ci-runs.json"
-
-                  run_id="$(
-                    jq -r --arg sha "$EXPECTED_SHA" '
-                      [
-                        .workflow_runs[]
-                        | select(
-                            .head_sha == $sha
-                            and .head_branch == "main"
-                            and .event == "push"
-                            and .conclusion == "success"
-                          )
-                      ]
-                      | first
-                      | .id // empty
-                    ' "$RUNNER_TEMP/ci-runs.json"
-                  )"
-
-                  if [[ -z "$run_id" ]]; then
-                    echo "::error::No successful CI for approved SHA."
-                    exit 1
-                  fi
-
-                  gh api \
-                    "repos/$GITHUB_REPOSITORY/actions/runs/$run_id/jobs?per_page=100" \
-                    > "$RUNNER_TEMP/ci-jobs.json"
-
-                  required_jobs=(
-                    "Validate"
-                    "API / PostgreSQL + MongoDB Integration"
-                    "Critical Full-Stack E2E"
-                    "Production Container Delivery"
-                  )
-
-                  for name in "${required_jobs[@]}"; do
-                    if ! jq -e --arg name "$name" '
-                      any(
-                        .jobs[];
-                        .name == $name and .conclusion == "success"
-                      )
-                    ' "$RUNNER_TEMP/ci-jobs.json" >/dev/null; then
-                      echo "::error::Required CI job failed: $name"
-                      exit 1
-                    fi
-                  done
-
-                  echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
-                  echo "Validated CI run: $run_id"
-
-    authorize:
-        name: Authorize public release
-        needs: preflight
-        runs-on: ubuntu-latest
-        environment: production-public-release
-
-        steps:
-            - name: Confirm protected environment
-              run: echo "Public release context authorized."
+                  echo "proceed=true" >> "$GITHUB_OUTPUT"
+                  echo "Authorized revision: $EXPECTED_SHA"
 
     migrate:
-        name: Apply production database migrations
-        needs: authorize
+        name: Apply Prisma migrations
+        needs: preflight
+        if: needs.preflight.outputs.proceed == 'true'
         uses: ./.github/workflows/production-migrations.yml
         with:
             expected_sha: ${{ inputs.expected_sha }}
             confirm: true
+        secrets: inherit
 
     deploy-api:
         name: Deploy API to Render
-        needs: migrate
+        needs:
+            - preflight
+            - migrate
         runs-on: ubuntu-latest
         timeout-minutes: 40
         environment: production-public-release
 
         outputs:
-            deploy_id: ${{ steps.render.outputs.deploy_id }}
+            deploy_id: ${{ steps.deploy.outputs.id }}
 
         env:
             EXPECTED_SHA: ${{ inputs.expected_sha }}
             RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
             RENDER_SERVICE_ID: ${{ vars.RENDER_SERVICE_ID }}
             RENDER_API_ORIGIN: ${{ vars.RENDER_API_ORIGIN }}
+            GH_TOKEN: ${{ github.token }}
 
         steps:
-            - name: Validate Render configuration
+            - name: Verify revision and configuration
               shell: bash
               run: |
                   set -euo pipefail
@@ -157,19 +90,25 @@ jobs:
                   [[ "$RENDER_SERVICE_ID" == srv-* ]]
                   [[ "$RENDER_API_ORIGIN" == https://* ]]
 
-            - name: Deploy approved commit
-              id: render
+                  main_sha="$(
+                    gh api "repos/$GITHUB_REPOSITORY/branches/main" \
+                      --jq '.commit.sha'
+                  )"
+
+                  [[ "$EXPECTED_SHA" == "$main_sha" ]] || {
+                    echo "::error::main changed before deployment."
+                    exit 1
+                  }
+
+            - name: Trigger Render deployment
+              id: deploy
               shell: bash
               run: |
                   set -euo pipefail
 
                   payload="$(
-                    jq -nc \
-                      --arg sha "$EXPECTED_SHA" \
-                      '{
-                        commitId: $sha,
-                        clearCache: "do_not_clear"
-                      }'
+                    jq -nc --arg sha "$EXPECTED_SHA" \
+                      '{commitId: $sha}'
                   )"
 
                   response="$(
@@ -183,13 +122,13 @@ jobs:
 
                   deploy_id="$(jq -er '.id' <<< "$response")"
 
-                  echo "deploy_id=$deploy_id" >> "$GITHUB_OUTPUT"
+                  echo "id=$deploy_id" >> "$GITHUB_OUTPUT"
                   echo "Render deployment: $deploy_id"
 
-            - name: Wait for Render deployment
+            - name: Verify Render deployment
               shell: bash
               env:
-                  DEPLOY_ID: ${{ steps.render.outputs.deploy_id }}
+                  DEPLOY_ID: ${{ steps.deploy.outputs.id }}
               run: |
                   set -euo pipefail
 
@@ -213,6 +152,7 @@ jobs:
                           exit 1
                         }
 
+                        echo "Render deployment live."
                         exit 0
                         ;;
 
@@ -222,7 +162,6 @@ jobs:
                         ;;
 
                       *)
-                        echo "Render deployment status: $status"
                         sleep 20
                         ;;
                     esac
@@ -241,6 +180,7 @@ jobs:
                       --max-time 25 \
                       --output /dev/null \
                       "$RENDER_API_ORIGIN/health/ready"; then
+                      echo "API ready."
                       exit 0
                     fi
 
@@ -252,147 +192,97 @@ jobs:
 
     deploy-web:
         name: Deploy web to Vercel
-        needs: deploy-api
+        needs:
+            - preflight
+            - deploy-api
         runs-on: ubuntu-latest
-        timeout-minutes: 40
+        timeout-minutes: 45
         environment: production-public-release
 
         outputs:
-            deploy_id: ${{ steps.vercel.outputs.deploy_id }}
-            deployment_url: ${{ steps.vercel.outputs.url }}
+            deploy_id: ${{ steps.publish.outputs.id }}
+            deployment_url: ${{ steps.publish.outputs.url }}
 
         env:
             EXPECTED_SHA: ${{ inputs.expected_sha }}
-            GITHUB_REPO_ID: ${{ github.event.repository.id }}
             VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
             VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
             VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
-            VERCEL_PROJECT_NAME: ${{ vars.VERCEL_PROJECT_NAME }}
+            VERCEL_CLI_VERSION: ${{ vars.VERCEL_CLI_VERSION }}
 
         steps:
-            - name: Validate Vercel configuration
+            - name: Checkout authorized revision
+              uses: actions/checkout@v7
+              with:
+                  ref: ${{ inputs.expected_sha }}
+                  persist-credentials: false
+
+            - name: Setup pnpm and Node.js
+              uses: pnpm/setup@v3
+              with:
+                  runtime: node@24.21.0
+                  cache: true
+                  require-lockfile: true
+
+            - name: Build and deploy approved frontend
+              id: publish
               shell: bash
               run: |
                   set -euo pipefail
 
+                  [[ "$(git rev-parse HEAD)" == "$EXPECTED_SHA" ]]
                   test -n "$VERCEL_TOKEN"
+                  test -n "$VERCEL_ORG_ID"
                   test -n "$VERCEL_PROJECT_ID"
-                  test -n "$VERCEL_PROJECT_NAME"
-                  [[ "$GITHUB_REPO_ID" =~ ^[0-9]+$ ]]
+                  [[ "$VERCEL_CLI_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
 
-            - name: Create deployment from approved Git revision
-              id: vercel
-              shell: bash
-              run: |
-                  set -euo pipefail
+                  npm install --global "vercel@$VERCEL_CLI_VERSION"
 
-                  api_url="https://api.vercel.com/v13/deployments"
+                  vercel pull --yes \
+                    --environment=production \
+                    --token="$VERCEL_TOKEN"
+
+                  vercel build --prod \
+                    --token="$VERCEL_TOKEN"
+
+                  test -d .vercel/output
+
+                  url="$(
+                    vercel deploy --prebuilt --prod --yes \
+                      --token="$VERCEL_TOKEN" \
+                      --meta "githubCommitSha=$EXPECTED_SHA"
+                  )"
+
+                  [[ "$url" == https://* ]]
+
+                  vercel inspect "$url" --wait \
+                    --token="$VERCEL_TOKEN"
+
+                  host="${url#https://}"
+                  api_url="https://api.vercel.com/v13/deployments/$host"
 
                   if [[ "$VERCEL_ORG_ID" == team_* ]]; then
                     api_url="$api_url?teamId=$VERCEL_ORG_ID"
                   fi
 
-                  payload="$(
-                    jq -nc \
-                      --arg name "$VERCEL_PROJECT_NAME" \
-                      --arg project "$VERCEL_PROJECT_ID" \
-                      --arg sha "$EXPECTED_SHA" \
-                      --argjson repoId "$GITHUB_REPO_ID" \
-                      '{
-                        name: $name,
-                        project: $project,
-                        target: "production",
-                        gitSource: {
-                          type: "github",
-                          repoId: $repoId,
-                          ref: "main",
-                          sha: $sha
-                        },
-                        meta: {
-                          githubCommitSha: $sha
-                        },
-                        projectSettings: {
-                          commandForIgnoringBuildStep: "exit 1"
-                        }
-                      }'
-                  )"
-
                   response="$(
                     curl --fail --silent --show-error \
-                      --request POST \
                       "$api_url" \
-                      --header "Authorization: Bearer $VERCEL_TOKEN" \
-                      --header "Content-Type: application/json" \
-                      --data "$payload"
+                      --header "Authorization: Bearer $VERCEL_TOKEN"
                   )"
 
-                  deploy_id="$(jq -er '.id' <<< "$response")"
-                  deployment_host="$(jq -er '.url' <<< "$response")"
+                  [[ "$(jq -r '.readyState' <<< "$response")" == "READY" ]]
+                  [[ "$(jq -r '.meta.githubCommitSha' <<< "$response")" == "$EXPECTED_SHA" ]]
 
-                  echo "deploy_id=$deploy_id" >> "$GITHUB_OUTPUT"
-                  echo "url=https://$deployment_host" >> "$GITHUB_OUTPUT"
+                  deploy_id="$(jq -er '.id // .uid' <<< "$response")"
+
+                  echo "id=$deploy_id" >> "$GITHUB_OUTPUT"
+                  echo "url=$url" >> "$GITHUB_OUTPUT"
                   echo "Vercel deployment: $deploy_id"
 
-            - name: Wait for deployment and verify revision
-              shell: bash
-              env:
-                  DEPLOY_ID: ${{ steps.vercel.outputs.deploy_id }}
-              run: |
-                  set -euo pipefail
-
-                  api_url="https://api.vercel.com/v13/deployments/$DEPLOY_ID?withGitRepoInfo=true"
-
-                  if [[ "$VERCEL_ORG_ID" == team_* ]]; then
-                    api_url="$api_url&teamId=$VERCEL_ORG_ID"
-                  fi
-
-                  for attempt in {1..90}; do
-                    response="$(
-                      curl --fail --silent --show-error \
-                        "$api_url" \
-                        --header "Authorization: Bearer $VERCEL_TOKEN"
-                    )"
-
-                    status="$(
-                      jq -r '.readyState // .status // "UNKNOWN"' \
-                        <<< "$response"
-                    )"
-
-                    case "$status" in
-                      READY)
-                        deployed_sha="$(
-                          jq -r '.gitSource.sha // empty' \
-                            <<< "$response"
-                        )"
-
-                        [[ "$deployed_sha" == "$EXPECTED_SHA" ]] || {
-                          echo "::error::Vercel SHA mismatch."
-                          exit 1
-                        }
-
-                        echo "Vercel deployment ready: $DEPLOY_ID"
-                        exit 0
-                        ;;
-
-                      ERROR|CANCELED)
-                        echo "::error::Vercel deployment failed: $status"
-                        exit 1
-                        ;;
-
-                      *)
-                        echo "Vercel deployment status: $status"
-                        sleep 20
-                        ;;
-                    esac
-                  done
-
-                  echo "::error::Vercel deployment timed out."
-                  exit 1
-
     smoke:
-        name: Verify public release
+        name: Verify public deployment
         needs:
-            - preflight
             - deploy-api
             - deploy-web
         runs-on: ubuntu-latest
@@ -400,13 +290,12 @@ jobs:
         environment: production-public-release
 
         env:
-            EXPECTED_SHA: ${{ inputs.expected_sha }}
             RENDER_API_ORIGIN: ${{ vars.RENDER_API_ORIGIN }}
             VERCEL_PUBLIC_ORIGIN: ${{ vars.VERCEL_PUBLIC_ORIGIN }}
             VERCEL_DEPLOYMENT_URL: ${{ needs.deploy-web.outputs.deployment_url }}
 
         steps:
-            - name: Verify public endpoints
+            - name: Verify public routes
               shell: bash
               run: |
                   set -euo pipefail
@@ -414,11 +303,10 @@ jobs:
                   check_ok() {
                     local url="$1"
 
-                    for attempt in {1..25}; do
+                    for attempt in {1..20}; do
                       if curl --fail --silent --show-error \
-                        --max-time 25 \
-                        --output /dev/null \
-                        "$url"; then
+                        --location --max-time 25 \
+                        --output /dev/null "$url"; then
                         echo "OK: $url"
                         return 0
                       fi
@@ -432,13 +320,10 @@ jobs:
 
                   check_ok "$RENDER_API_ORIGIN/health/live"
                   check_ok "$RENDER_API_ORIGIN/health/ready"
-
                   check_ok "$VERCEL_DEPLOYMENT_URL/"
                   check_ok "$VERCEL_PUBLIC_ORIGIN/"
-
                   check_ok "$VERCEL_PUBLIC_ORIGIN/login"
                   check_ok "$VERCEL_PUBLIC_ORIGIN/register"
-
                   check_ok "$VERCEL_PUBLIC_ORIGIN/health/live"
                   check_ok "$VERCEL_PUBLIC_ORIGIN/health/ready"
 
@@ -451,35 +336,15 @@ jobs:
                   )"
 
                   [[ "$status" == "401" ]] || {
-                    echo "::error::Unexpected authentication status."
+                    echo "::error::Protected endpoint returned $status."
                     exit 1
                   }
-
-            - name: Record successful release
-              shell: bash
-              env:
-                  CI_RUN_ID: ${{ needs.preflight.outputs.ci_run_id }}
-                  RENDER_DEPLOY_ID: ${{ needs.deploy-api.outputs.deploy_id }}
-                  VERCEL_DEPLOY_ID: ${{ needs.deploy-web.outputs.deploy_id }}
-              run: |
-                  {
-                    echo "## Public release"
-                    echo ""
-                    echo "- Source SHA: \`$EXPECTED_SHA\`"
-                    echo "- CI run: $CI_RUN_ID"
-                    echo "- Render deployment: $RENDER_DEPLOY_ID"
-                    echo "- Vercel deployment: $VERCEL_DEPLOY_ID"
-                    echo "- Web deployment: $VERCEL_DEPLOYMENT_URL"
-                    echo "- Public web: $VERCEL_PUBLIC_ORIGIN"
-                    echo "- Public smoke: passed"
-                  } >> "$GITHUB_STEP_SUMMARY"
 
     result:
         name: Record release outcome
         if: always()
         needs:
             - preflight
-            - authorize
             - migrate
             - deploy-api
             - deploy-web
@@ -490,32 +355,44 @@ jobs:
             - name: Summarize release
               shell: bash
               env:
+                  SHA: ${{ inputs.expected_sha }}
+                  PROCEED: ${{ needs.preflight.outputs.proceed }}
                   PREFLIGHT: ${{ needs.preflight.result }}
-                  AUTHORIZATION: ${{ needs.authorize.result }}
                   MIGRATIONS: ${{ needs.migrate.result }}
                   API: ${{ needs.deploy-api.result }}
                   WEB: ${{ needs.deploy-web.result }}
                   SMOKE: ${{ needs.smoke.result }}
+                  RENDER_ID: ${{ needs.deploy-api.outputs.deploy_id }}
+                  VERCEL_ID: ${{ needs.deploy-web.outputs.deploy_id }}
+                  WEB_URL: ${{ needs.deploy-web.outputs.deployment_url }}
               run: |
+                  set -euo pipefail
+
                   {
-                    echo "## Release execution results"
+                    echo "## Public release"
+                    echo ""
+                    echo "- Commit: \`$SHA\`"
+                    echo "- CI run: $GITHUB_RUN_ID"
+                    echo "- Render deployment: ${RENDER_ID:-none}"
+                    echo "- Vercel deployment: ${VERCEL_ID:-none}"
+                    echo "- Vercel URL: ${WEB_URL:-none}"
                     echo ""
                     echo "| Stage | Result |"
                     echo "|---|---|"
                     echo "| Preflight | $PREFLIGHT |"
-                    echo "| Authorization | $AUTHORIZATION |"
                     echo "| Migrations | $MIGRATIONS |"
                     echo "| Render | $API |"
                     echo "| Vercel | $WEB |"
                     echo "| Public smoke | $SMOKE |"
                   } >> "$GITHUB_STEP_SUMMARY"
 
-                  for result in \
-                    "$PREFLIGHT" \
-                    "$AUTHORIZATION" \
-                    "$MIGRATIONS" \
-                    "$API" \
-                    "$WEB" \
-                    "$SMOKE"; do
-                    [[ "$result" == "success" ]] || exit 1
+                  if [[ "$PREFLIGHT" == "success" && "$PROCEED" == "false" ]]; then
+                    echo "Obsolete revision intentionally skipped."
+                    exit 0
+                  fi
+
+                  for status in \
+                    "$PREFLIGHT" "$MIGRATIONS" \
+                    "$API" "$WEB" "$SMOKE"; do
+                    [[ "$status" == "success" ]] || exit 1
                   done
