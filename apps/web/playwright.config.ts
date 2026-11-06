@@ -100,7 +100,8 @@ export default defineConfig({
                 timeout: 1_000,
             },
             env: {
-                NEXT_PUBLIC_API_BASE_URL: API_BASE_URL,
+                NEXT_PUBLIC_API_BASE_URL: WEB_BASE_URL,
+                API_UPSTREAM_ORIGIN: API_BASE_URL,
             },
         },
     ],

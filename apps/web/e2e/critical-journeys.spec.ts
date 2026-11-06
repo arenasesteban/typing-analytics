@@ -2,8 +2,6 @@ import { randomUUID } from 'node:crypto';
 
 import { expect, test, type Page } from '@playwright/test';
 
-const E2E_API_URL = 'http://localhost:3003';
-
 test.use({
     trace: 'off',
     screenshot: 'off',
@@ -115,7 +113,7 @@ async function completeTypingSession(page: Page): Promise<CompletedSession> {
             const url = new URL(response.url());
 
             return (
-                url.origin === E2E_API_URL &&
+                url.origin === new URL(page.url()).origin &&
                 /^\/typing-sessions\/[^/]+\/complete$/u.test(url.pathname) &&
                 response.request().method() === 'POST'
             );
@@ -338,7 +336,8 @@ test.describe('Critical application journeys', () => {
             ];
 
             for (const resource of protectedResources) {
-                const response = await page.request.get(`${E2E_API_URL}${resource}`);
+                const webOrigin = new URL(page.url()).origin;
+                const response = await page.request.get(`${webOrigin}${resource}`);
 
                 expect(response.status(), `Unexpected status for ${resource}`).toBe(401);
             }
@@ -387,7 +386,7 @@ test.describe('Critical application journeys', () => {
                     const url = new URL(response.url());
 
                     return (
-                        url.origin === E2E_API_URL &&
+                        url.origin === new URL(pageA.url()).origin &&
                         url.pathname === `/typing-sessions/${ownedSession.id}` &&
                         response.request().method() === 'GET'
                     );

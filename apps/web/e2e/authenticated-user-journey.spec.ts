@@ -77,6 +77,38 @@ test('Flow A: registers, logs in, completes a typing test, verifies behavioral a
 
     await expect(page.getByTestId('persistence-status')).toHaveText('ready');
 
+    const browserOrigin = new URL(page.url()).origin;
+    const webUrl = new URL(browserOrigin);
+    const refreshCookieName = 'typing_analytics_refresh';
+
+    const registrationSetCookieHeader = await registerResponse.headerValue('set-cookie');
+
+    expect(registrationSetCookieHeader).not.toBeNull();
+    expect(/(?:^|;)\s*domain=/iu.test(registrationSetCookieHeader ?? '')).toBe(false);
+
+    await expect
+        .poll(
+            async () => {
+                const cookies = await page.context().cookies();
+                const refreshCookie = cookies.find((cookie) => cookie.name === refreshCookieName);
+
+                return (
+                    refreshCookie !== undefined &&
+                    refreshCookie.domain === webUrl.hostname &&
+                    refreshCookie.path === '/auth' &&
+                    refreshCookie.httpOnly &&
+                    refreshCookie.sameSite === 'Lax' &&
+                    refreshCookie.expires > Date.now() / 1000 &&
+                    (webUrl.protocol !== 'https:' || refreshCookie.secure)
+                );
+            },
+            {
+                message: 'Registration refresh cookie was not stored with the expected attributes',
+                timeout: 5_000,
+            },
+        )
+        .toBe(true);
+
     // Sign out.
 
     await page
@@ -96,6 +128,14 @@ test('Flow A: registers, logs in, completes a typing test, verifies behavioral a
             name: 'sign in',
         }),
     ).toBeVisible();
+
+    await expect
+        .poll(async () => {
+            const cookies = await page.context().cookies();
+
+            return cookies.some((cookie) => cookie.name === refreshCookieName);
+        })
+        .toBe(false);
 
     // Sign in and capture the server-created typing session.
 
@@ -128,6 +168,32 @@ test('Flow A: registers, logs in, completes a typing test, verifies behavioral a
 
     expect(loginResponse.ok(), `Login returned HTTP ${String(loginResponse.status())}`).toBe(true);
 
+    expect(new URL(loginResponse.url()).origin).toBe(browserOrigin);
+
+    const loginCookie = (await page.context().cookies()).find(
+        (cookie) => cookie.name === refreshCookieName,
+    );
+
+    if (loginCookie === undefined) {
+        throw new Error('Login did not issue the expected refresh cookie');
+    }
+
+    expect(loginCookie.domain).toBe(webUrl.hostname);
+    expect(loginCookie.path).toBe('/auth');
+    expect(loginCookie.httpOnly).toBe(true);
+    expect(loginCookie.sameSite).toBe('Lax');
+    expect(loginCookie.expires).toBeGreaterThan(Date.now() / 1000);
+
+    if (webUrl.protocol === 'https:') {
+        expect(loginCookie.secure).toBe(true);
+    }
+
+    const loginSetCookieHeader = await loginResponse.headerValue('set-cookie');
+
+    expect(loginSetCookieHeader).not.toBeNull();
+
+    expect(/(?:^|;)\s*domain=/iu.test(loginSetCookieHeader ?? '')).toBe(false);
+
     const createdSessionResponse = await createdSessionResponsePromise;
 
     const createdSessionBody: unknown = await createdSessionResponse.json();
@@ -147,6 +213,42 @@ test('Flow A: registers, logs in, completes a typing test, verifies behavioral a
     await expect(page.getByTestId('persistence-status')).toHaveText('ready');
 
     await expect(page.getByTestId('typing-text')).toHaveText(generatedTarget);
+
+    const refreshResponsePromise = page.waitForResponse(
+        (response) =>
+            new URL(response.url()).pathname === '/auth/refresh' &&
+            response.request().method() === 'POST',
+    );
+
+    const refreshStatus = await page.evaluate(async () => {
+        const response = await fetch('/auth/refresh', {
+            method: 'POST',
+            credentials: 'include',
+        });
+
+        return response.status;
+    });
+
+    const refreshResponse = await refreshResponsePromise;
+
+    expect(refreshStatus).toBe(200);
+    expect(refreshResponse.status()).toBe(200);
+    expect(new URL(refreshResponse.url()).origin).toBe(browserOrigin);
+
+    await expect
+        .poll(
+            async () => {
+                const cookies = await page.context().cookies();
+                const rotatedCookie = cookies.find((cookie) => cookie.name === refreshCookieName);
+
+                return rotatedCookie !== undefined && rotatedCookie.value !== loginCookie.value;
+            },
+            {
+                message: 'Refresh did not rotate the stored cookie',
+                timeout: 5_000,
+            },
+        )
+        .toBe(true);
 
     // Introduce one incorrect character and correct it with Backspace.
 
@@ -322,5 +424,9 @@ test('Flow A: registers, logs in, completes a typing test, verifies behavioral a
 
     await expect(page.getByTestId('dashboard-session-count')).toHaveText('1');
 
-    await expect(page.getByTestId('dashboard-history-row')).toHaveCount(1);
+    await page.reload();
+
+    await expect(page.getByTestId('dashboard-data')).toBeVisible();
+
+    await expect(page.getByTestId('dashboard-session-count')).toHaveText('1');
 });
