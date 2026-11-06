@@ -1,4 +1,4 @@
-name: CD
+name: Production Database Migrations
 
 on:
     workflow_dispatch:
@@ -35,9 +35,9 @@ jobs:
               shell: bash
               env:
                   REQUESTED_SHA: ${{ inputs.expected_sha }}
-                  WORKFLOW_SHA: ${{ github.sha }}
                   WORKFLOW_REF: ${{ github.ref }}
                   CONFIRMED: ${{ inputs.confirm }}
+                  GH_TOKEN: ${{ github.token }}
               run: |
                   set -euo pipefail
 
@@ -56,12 +56,17 @@ jobs:
                     exit 1
                   fi
 
-                  if [[ "$REQUESTED_SHA" != "$WORKFLOW_SHA" ]]; then
-                    echo "::error::Requested SHA differs from the workflow revision."
+                  main_sha="$(
+                    gh api "repos/$GITHUB_REPOSITORY/branches/main" \
+                      --jq '.commit.sha'
+                  )"
+
+                  if [[ "$REQUESTED_SHA" != "$main_sha" ]]; then
+                    echo "::error::Requested SHA is not current main HEAD."
                     exit 1
                   fi
 
-                  echo "Authorized revision: $WORKFLOW_SHA"
+                  echo "Authorized migration revision: $REQUESTED_SHA"
 
     migrate:
         name: Migrate Neon PostgreSQL
@@ -74,7 +79,7 @@ jobs:
             cancel-in-progress: false
 
         environment:
-            name: production
+            name: production-db-migrations
 
         steps:
             - name: Checkout authorized revision
@@ -127,7 +132,7 @@ jobs:
               if: always()
               shell: bash
               env:
-                  REVISION: ${{ github.sha }}
+                  REVISION: ${{ inputs.expected_sha }}
                   EXECUTION_STATUS: ${{ job.status }}
                   MIGRATION_OUTCOME: ${{ steps.deploy.outcome }}
                   STATUS_OUTCOME: ${{ steps.status.outcome }}

@@ -208,3 +208,20 @@ jobs:
               run: |
                   docker compose --profile delivery down \
                     --volumes --remove-orphans
+
+    release:
+        name: Public Release
+        needs:
+            - validate
+            - api-integration
+            - e2e
+            - container-delivery
+        if: >-
+            ${{
+              github.event_name == 'push' &&
+              github.ref == 'refs/heads/main'
+            }}
+        uses: ./.github/workflows/public-release.yml
+        with:
+            expected_sha: ${{ github.sha }}
+        secrets: inherit
