@@ -2,8 +2,6 @@ import { randomUUID } from 'node:crypto';
 
 import { expect, type Page } from '@playwright/test';
 
-export const E2E_API_URL = 'http://localhost:3003';
-
 export interface TestAccount {
     readonly email: string;
     readonly password: string;
@@ -77,7 +75,7 @@ export async function completeBrowserTypingSession(page: Page): Promise<Complete
         (response) => {
             const url = new URL(response.url());
             return (
-                url.origin === E2E_API_URL &&
+                url.origin === new URL(page.url()).origin &&
                 /^\/typing-sessions\/[^/]+\/complete$/u.test(url.pathname) &&
                 response.request().method() === 'POST'
             );

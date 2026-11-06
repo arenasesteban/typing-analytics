@@ -20,6 +20,7 @@ export function validateWebDeliveryConfig(
     apiBaseUrl: string | undefined,
     environment: string | undefined,
     localDeliveryValue: string | undefined,
+    apiUpstreamOrigin?: string,
 ): WebDeliveryConfig {
     if (
         localDeliveryValue !== undefined &&
@@ -38,6 +39,48 @@ export function validateWebDeliveryConfig(
     if (!apiBaseUrl?.trim()) {
         if (environment === 'production') {
             throw new Error('NEXT_PUBLIC_API_BASE_URL is required in production');
+        }
+
+        return { localContainerDelivery };
+    }
+
+    if (apiBaseUrl.trim() === '/') {
+        if (localContainerDelivery) {
+            throw new Error(
+                'Same-origin API routing is incompatible with local container delivery',
+            );
+        }
+
+        if (!apiUpstreamOrigin?.trim()) {
+            throw new Error('API_UPSTREAM_ORIGIN is required for same-origin API routing');
+        }
+
+        let upstream: URL;
+
+        try {
+            upstream = new URL(apiUpstreamOrigin.trim());
+        } catch {
+            throw new Error('API_UPSTREAM_ORIGIN must be a valid HTTP or HTTPS origin');
+        }
+
+        const validLocalHttp =
+            upstream.protocol === 'http:' &&
+            (isLoopbackHostname(upstream.hostname) || upstream.hostname === 'api');
+
+        const validProtocol =
+            environment === 'production'
+                ? upstream.protocol === 'https:' && !isLocalHostname(upstream.hostname)
+                : upstream.protocol === 'https:' || validLocalHttp;
+
+        if (
+            !validProtocol ||
+            upstream.username ||
+            upstream.password ||
+            upstream.pathname !== '/' ||
+            upstream.search ||
+            upstream.hash
+        ) {
+            throw new Error('API_UPSTREAM_ORIGIN must be a valid secure upstream origin');
         }
 
         return { localContainerDelivery };

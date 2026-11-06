@@ -18,6 +18,10 @@ function getApiBaseUrl(): string {
         throw new Error('NEXT_PUBLIC_API_BASE_URL is required');
     }
 
+    if (configuredBaseUrl.trim() === '/') {
+        return '';
+    }
+
     let parsedUrl: URL;
 
     try {

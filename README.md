@@ -4,6 +4,14 @@ Typing Analytics is a full-stack web application for typing practice, persistent
 
 The project is built as a reproducible TypeScript monorepo with a framework-independent typing domain, a Next.js frontend, a NestJS REST API, PostgreSQL for transactional persistence, MongoDB for validated typing events, and automated validation across unit, component, integration, and end-to-end testing.
 
+## Live deployment
+
+**Web application:** [Typing Analytics](https://typing-analytics-web.vercel.app)
+
+The application is publicly deployed using Vercel Hobby for the Next.js frontend,
+Render Free for the NestJS API, Neon Free for PostgreSQL, and MongoDB Atlas Free
+for validated typing events.
+
 ## Features
 
 - Dynamic typing targets generated from an approved English word corpus.

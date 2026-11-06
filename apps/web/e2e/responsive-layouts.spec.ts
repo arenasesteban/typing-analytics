@@ -2,8 +2,6 @@ import { randomUUID } from 'node:crypto';
 
 import { expect, test, type Page } from '@playwright/test';
 
-const E2E_API_URL = 'http://localhost:3003';
-
 const VIEWPORTS = [
     { label: 'narrow mobile', width: 320, height: 720 },
     { label: 'standard mobile', width: 375, height: 812 },
@@ -190,7 +188,20 @@ test.describe('Responsive application layouts', () => {
             height: 720,
         });
 
-        await page.goto('/history');
+        await page
+            .getByRole('button', {
+                name: /^Account menu\b/u,
+            })
+            .click();
+
+        await page
+            .getByRole('link', {
+                name: 'history',
+                exact: true,
+            })
+            .click();
+
+        await expect(page).toHaveURL((url) => url.pathname === '/history');
 
         await expect(page.getByTestId('history-empty')).toBeVisible();
 
@@ -233,7 +244,7 @@ test.describe('Responsive application layouts', () => {
                 const url = new URL(response.url());
 
                 return (
-                    url.origin === E2E_API_URL &&
+                    url.origin === new URL(page.url()).origin &&
                     /^\/typing-sessions\/[^/]+\/complete$/u.test(url.pathname) &&
                     response.request().method() === 'POST'
                 );
@@ -410,7 +421,7 @@ test.describe('Responsive application layouts', () => {
             const results: number[] = [];
 
             for (let attempt = 0; attempt < 35; attempt += 1) {
-                const response = await fetch('http://localhost:3003/auth/refresh', {
+                const response = await fetch('/auth/refresh', {
                     method: 'POST',
                     credentials: 'include',
                 });
