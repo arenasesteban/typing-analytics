@@ -224,6 +224,35 @@ jobs:
                   cache: true
                   require-lockfile: true
 
+            - name: Install pinned Vercel CLI
+              shell: bash
+              run: |
+                  set -euo pipefail
+
+                  test -n "$VERCEL_TOKEN"
+                  test -n "$VERCEL_ORG_ID"
+                  test -n "$VERCEL_PROJECT_ID"
+
+                  [[ "$VERCEL_CLI_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+
+                  cli_prefix="$RUNNER_TEMP/vercel-cli"
+                  cli_bin="$cli_prefix/bin"
+
+                  npm install --global \
+                    --prefix "$cli_prefix" \
+                    "vercel@$VERCEL_CLI_VERSION"
+
+                  if [[ ! -x "$cli_bin/vercel" ]]; then
+                    echo "::error::Vercel CLI executable was not installed."
+                    ls -la "$cli_bin" || true
+                    exit 1
+                  fi
+
+                  export PATH="$cli_bin:$PATH"
+                  echo "$cli_bin" >> "$GITHUB_PATH"
+
+                  vercel --version
+
             - name: Build and deploy approved frontend
               id: publish
               shell: bash
@@ -234,9 +263,6 @@ jobs:
                   test -n "$VERCEL_TOKEN"
                   test -n "$VERCEL_ORG_ID"
                   test -n "$VERCEL_PROJECT_ID"
-                  [[ "$VERCEL_CLI_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
-
-                  npm install --global "vercel@$VERCEL_CLI_VERSION"
 
                   vercel pull --yes \
                     --environment=production \
