@@ -7,7 +7,7 @@
 
 Typing Analytics uses PostgreSQL as its primary transactional database, responsible for user identities, authentication, typing sessions, ownership, and final performance metrics. This architecture provides a reliable foundation for managing structured application data and preserving the consistency of completed typing sessions.
 
-The introduction of Behavioral Analytics creates an additional persistence requirement: retaining the validated sequence of events generated during an individual typing session. Unlike final metrics, which summarize overall performance, these events preserve the information necessary to reconstruct temporal WPM and Raw WPM evolution, incorrect insertions, corrections, and character-level statistics.
+The introduction of Behavioral Analytics creates an additional persistence requirement: retaining the validated sequence of events generated during an individual typing session. Unlike final metrics, which summarize overall performance, these events preserve the information necessary to reconstruct temporal WPM and Raw WPM evolution, incorrect insertions, and corrections.
 
 Each completed session therefore requires a recoverable event history associated with its existing PostgreSQL record. This requirement introduces a distinction between transactional application data and the event documents used for session-level behavioral analysis.
 
