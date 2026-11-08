@@ -466,12 +466,6 @@ After the required quality gates succeed on a push to `main`, GitHub Actions inv
 
 Production credentials remain in protected workflow configuration and provider environments. The public promotion is not triggered by pull requests.
 
-## Project status
-
-Current development stage: **v0.9.0 — Release Candidate (in progress)**.
-
-The v0.8.0 public deployment is implemented. The current phase focuses on release qualification, documentation, and evidence preparation. The stable v1.0.0 release has not yet been published.
-
 ### Known limitations
 
 - Free-tier hosting may introduce cold starts, temporary suspension, and resource restrictions. The public demonstration has no uptime SLA.
