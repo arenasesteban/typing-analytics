@@ -1,6 +1,6 @@
 # Typing Analytics
 
-Typing Analytics is a full-stack web application for typing practice, persistent session history, and the progressive analysis of typing performance.
+Typing Analytics is a full-stack web application for practicing typing, tracking performance over time, and analyzing typing behavior through detailed session metrics and visualizations.
 
 The project is built as a reproducible TypeScript monorepo with a framework-independent typing domain, a Next.js frontend, a NestJS REST API, PostgreSQL for transactional persistence, MongoDB for validated typing events, and automated validation across unit, component, integration, and end-to-end testing.
 
@@ -8,9 +8,11 @@ The project is built as a reproducible TypeScript monorepo with a framework-inde
 
 **Web application:** [Typing Analytics](https://typing-analytics-web.vercel.app)
 
-The application is publicly deployed using Vercel Hobby for the Next.js frontend,
-Render Free for the NestJS API, Neon Free for PostgreSQL, and MongoDB Atlas Free
-for validated typing events.
+The application is publicly deployed using Vercel Hobby for the Next.js frontend, Render Free for the NestJS API, Neon Free for PostgreSQL, and MongoDB Atlas Free for validated typing events.
+
+This free-tier deployment is intended for portfolio demonstration. Cold starts and provider limitations may temporarily affect availability.
+
+For architecture and deployment decisions, see [ADR-003 — Public Deployment Architecture](docs/adr/003-public-deployment-architecture.md).
 
 ## Features
 
@@ -20,10 +22,10 @@ for validated typing events.
 - Short-lived access tokens with rotating refresh sessions.
 - Persistent typing sessions owned by authenticated users.
 - Server-side validation of completed typing sessions.
-- Durable persistence of validated typing events in MongoDB.
 - Private paginated session history.
 - Private session detail with the concrete target and persisted metrics.
-- Automated unit, component, API integration, and full-stack browser testing.
+- Historical dashboard with private performance trends and time-range filters.
+- Session-level Behavioral Analytics with temporal WPM, Raw WPM, and error markers.
 
 ## Architecture
 
@@ -60,6 +62,10 @@ The browser handles the interactive typing lifecycle locally. For authenticated 
 
 PostgreSQL remains the authoritative datastore for authentication, session ownership, completion state, and final metrics. MongoDB stores validated typing event documents associated with individual completed sessions. A PostgreSQL transactional outbox coordinates reliable delivery between both databases.
 
+For the authoritative definitions of Duration, WPM, Raw WPM, Accuracy, Consistency, and temporal typing speed, see [Typing Performance Metrics](docs/metrics.md).
+
+The earlier AWS deployment design is preserved in [ADR-002 — AWS Deployment Architecture](docs/adr/002-aws-deployment-architecture.md) as a superseded architectural decision.
+
 ## Tech stack
 
 | Area                     | Technology                                    |
@@ -75,7 +81,7 @@ PostgreSQL remains the authoritative datastore for authentication, session owner
 | API integration testing  | Vitest, Supertest, PostgreSQL, MongoDB        |
 | End-to-end testing       | Playwright                                    |
 | Local infrastructure     | Docker Compose                                |
-| CI                       | GitHub Actions                                |
+| CI/CD                    | GitHub Actions                                |
 | Package management       | pnpm workspaces                               |
 
 ## Repository structure
@@ -111,7 +117,7 @@ PostgreSQL remains the authoritative datastore for authentication, session owner
 Install the workspace dependencies:
 
 ```bash
-pnpm install
+pnpm install --frozen-lockfile
 ```
 
 Create the local environment files.
@@ -129,6 +135,10 @@ Unix-like shells:
 cp apps/api/.env.example apps/api/.env
 cp apps/web/.env.example apps/web/.env.local
 ```
+
+Set `JWT_ACCESS_SECRET` in `apps/api/.env` to a unique, cryptographically secure value of at least 32 bytes before starting the API. Keep local environment files untracked and use only non-production credentials.
+
+The example environment files configure the local PostgreSQL, MongoDB, API, and web endpoints. Adjust their values only when your local configuration differs from those defaults.
 
 Start PostgreSQL and MongoDB:
 
@@ -415,7 +425,7 @@ pnpm db:reset
 
 > `pnpm db:reset` removes the local PostgreSQL and MongoDB development volumes.
 
-## Continuous Integration
+## CI/CD
 
 GitHub Actions validates pull requests and pushes to `main`.
 
@@ -450,6 +460,23 @@ Production Container Delivery
 
 The full-stack E2E job uses the same `pnpm test:e2e` entry point available for local development. Container delivery uses the existing Docker Compose configuration and `scripts/delivery-smoke.mjs` to validate production artifacts in CI.
 
+### Public release promotion
+
+After the required quality gates succeed on a push to `main`, GitHub Actions invokes [Public Release Promotion](.github/workflows/public-release.yml). The workflow verifies the approved commit SHA, applies controlled Prisma migrations through [Production Database Migrations](.github/workflows/production-migrations.yml), deploys the API to Render and the frontend to Vercel, and verifies public service readiness and access behavior.
+
+Production credentials remain in protected workflow configuration and provider environments. The public promotion is not triggered by pull requests.
+
 ## Project status
 
-Current development stage: **v0.8.0 — Public Deployment (in progress)**
+Current development stage: **v0.9.0 — Release Candidate (in progress)**.
+
+The v0.8.0 public deployment is implemented. The current phase focuses on release qualification, documentation, and evidence preparation. The stable v1.0.0 release has not yet been published.
+
+### Known limitations
+
+- Free-tier hosting may introduce cold starts, temporary suspension, and resource restrictions. The public demonstration has no uptime SLA.
+- Behavioral event documents are delivered with recoverable eventual consistency. A completed session can temporarily report `PENDING` before its event document becomes `READY`.
+
+### Future work
+
+Additional typing modes, languages, or alternative deployment architectures are outside the approved v1.0.0 scope and require separate evaluation and approval.
