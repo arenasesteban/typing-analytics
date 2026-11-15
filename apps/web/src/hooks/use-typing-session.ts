@@ -10,7 +10,7 @@ import {
     type TypingInput,
     type TypingSessionState,
 } from '@typing-analytics/typing-core';
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { useAuth } from '@/auth/use-auth';
 import {
@@ -40,37 +40,52 @@ interface UseTypingSessionResult {
     readonly result: TypingResult | null;
     readonly behavioral: SessionBehavioralResult | null;
     readonly error: TypingError | null;
-    readonly handleKeyDown: (event: KeyboardEvent<HTMLElement>) => void;
+    readonly handleTextInput: (value: string, timestampMs: number) => string;
     readonly restartSession: () => void;
 }
 
-function toTypingInput(event: KeyboardEvent<HTMLElement>): TypingInput | null {
-    if (
-        event.defaultPrevented ||
-        event.metaKey ||
-        event.ctrlKey ||
-        event.altKey ||
-        event.key === 'Tab'
-    ) {
-        return null;
-    }
+function getEnteredText(session: TypingSessionState): string {
+    return session.typedCharacters.map(({ enteredCharacter }) => enteredCharacter).join('');
+}
 
-    if (event.key === 'Backspace') {
+function toTypingInput(
+    previousValue: string,
+    nextValue: string,
+    timestampMs: number,
+): TypingInput | null {
+    const previous = Array.from(previousValue);
+    const next = Array.from(nextValue);
+
+    const isSingleAppend =
+        next.length === previous.length + 1 &&
+        previous.every((character, index) => character === next[index]);
+
+    if (isSingleAppend) {
+        const character = next.at(-1);
+
+        if (character === undefined || character === '\n' || character === '\r') {
+            return null;
+        }
+
         return {
-            type: 'backspace',
-            timestampMs: event.timeStamp,
+            type: 'insert',
+            value: character,
+            timestampMs,
         };
     }
 
-    if (Array.from(event.key).length !== 1) {
-        return null;
+    const isSingleBackspace =
+        next.length === previous.length - 1 &&
+        next.every((character, index) => character === previous[index]);
+
+    if (isSingleBackspace) {
+        return {
+            type: 'backspace',
+            timestampMs,
+        };
     }
 
-    return {
-        type: 'insert',
-        value: event.key,
-        timestampMs: event.timeStamp,
-    };
+    return null;
 }
 
 export function useTypingSession(): UseTypingSessionResult {
@@ -233,25 +248,25 @@ export function useTypingSession(): UseTypingSessionResult {
         void beginSession(nextMode, nextMode === 'authenticated' ? accessToken : null);
     }, [accessToken, authStatus, beginSession]);
 
-    const handleKeyDown = useCallback(
-        (event: KeyboardEvent<HTMLElement>) => {
-            if (status !== 'ready' || mode === null) {
-                return;
-            }
-
-            const input = toTypingInput(event);
-
-            if (input === null) {
-                return;
-            }
-
+    const handleTextInput = useCallback(
+        (value: string, timestampMs: number): string => {
             const currentSession = sessionRef.current;
 
             if (currentSession === null) {
-                return;
+                return '';
             }
 
-            event.preventDefault();
+            const previousValue = getEnteredText(currentSession);
+
+            if (status !== 'ready' || mode === null) {
+                return previousValue;
+            }
+
+            const input = toTypingInput(previousValue, value, timestampMs);
+
+            if (input === null) {
+                return previousValue;
+            }
 
             let nextSession: TypingSessionState;
 
@@ -259,14 +274,14 @@ export function useTypingSession(): UseTypingSessionResult {
                 nextSession = applyTypingInput(currentSession, input);
             } catch (caughtError) {
                 if (caughtError instanceof RangeError) {
-                    return;
+                    return previousValue;
                 }
 
                 throw caughtError;
             }
 
             if (nextSession === currentSession) {
-                return;
+                return previousValue;
             }
 
             const nextInputs = [...inputsRef.current, input];
@@ -277,17 +292,16 @@ export function useTypingSession(): UseTypingSessionResult {
             setSession(nextSession);
 
             if (nextSession.status !== 'completed' || completionRequestedRef.current) {
-                return;
+                return getEnteredText(nextSession);
             }
 
             completionRequestedRef.current = true;
 
             if (mode === 'guest') {
                 setResult(summarizeCompletedSession(nextSession));
-
                 setStatus('completed');
 
-                return;
+                return getEnteredText(nextSession);
             }
 
             if (createdSession === null || accessToken === null) {
@@ -298,7 +312,7 @@ export function useTypingSession(): UseTypingSessionResult {
 
                 setStatus('error');
 
-                return;
+                return getEnteredText(nextSession);
             }
 
             setStatus('persisting');
@@ -306,6 +320,8 @@ export function useTypingSession(): UseTypingSessionResult {
             const generation = lifecycleGenerationRef.current;
 
             void submitCompletion(accessToken, createdSession, nextInputs, generation);
+
+            return getEnteredText(nextSession);
         },
         [accessToken, createdSession, mode, status, submitCompletion],
     );
@@ -325,7 +341,7 @@ export function useTypingSession(): UseTypingSessionResult {
         result,
         behavioral,
         error,
-        handleKeyDown,
+        handleTextInput,
         restartSession,
     };
 }

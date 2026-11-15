@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -148,16 +148,17 @@ describe('TypingTest persistent session integration', () => {
         });
     });
 
-    it('exposes an accessible typing region and complete target', async () => {
+    it('exposes an accessible native typing input and complete target', async () => {
         fetchMock.mockResolvedValueOnce(jsonResponse(CREATED_SESSION, 201));
 
         render(<TypingTest />);
 
-        const surface = await screen.findByRole('group', {
+        const surface = await screen.findByRole('textbox', {
             name: 'Typing test input',
         });
 
-        expect(surface).toHaveAttribute('tabindex', '0');
+        expect(surface.tagName).toBe('TEXTAREA');
+        expect(surface).toHaveAttribute('inputmode', 'text');
         expect(surface).toHaveAttribute(
             'aria-describedby',
             'typing-instructions typing-target-readable',
@@ -519,5 +520,109 @@ describe('TypingTest persistent session integration', () => {
         expect(randomSpy).toHaveBeenCalledTimes(DEFAULT_TYPING_WORD_COUNT * 2);
 
         expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('accepts native text insertion and Backspace', async () => {
+        fetchMock.mockResolvedValueOnce(jsonResponse(CREATED_SESSION, 201));
+
+        const user = userEvent.setup();
+
+        render(<TypingTest />);
+
+        const surface = await waitForReadySession();
+
+        await user.click(surface);
+        await user.keyboard('x');
+
+        expect(surface).toHaveValue('x');
+        expect(getCharacter(0)).toHaveAttribute('data-state', 'incorrect');
+        expect(screen.getByTestId('current-position')).toHaveTextContent('1 / 3');
+
+        await user.keyboard('{Backspace}');
+
+        expect(surface).toHaveValue('');
+        expect(getCharacter(0)).toHaveAttribute('data-state', 'current');
+        expect(screen.getByTestId('current-position')).toHaveTextContent('0 / 3');
+    });
+
+    it('rejects unsupported bulk insertion without changing the session', async () => {
+        fetchMock.mockResolvedValueOnce(jsonResponse(CREATED_SESSION, 201));
+
+        render(<TypingTest />);
+
+        const surface = await waitForReadySession();
+
+        fireEvent.input(surface, {
+            target: { value: 'cat' },
+        });
+
+        expect(surface).toHaveValue('');
+        expect(screen.getByTestId('session-status')).toHaveTextContent('idle');
+        expect(screen.getByTestId('current-position')).toHaveTextContent('0 / 3');
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('rejects replacement operations without corrupting accepted input', async () => {
+        fetchMock.mockResolvedValueOnce(jsonResponse(CREATED_SESSION, 201));
+
+        const user = userEvent.setup();
+
+        render(<TypingTest />);
+
+        await typeAttempt(user, 'c');
+
+        const surface = await waitForReadySession();
+
+        fireEvent.input(surface, {
+            target: { value: 'cat' },
+        });
+
+        expect(surface).toHaveValue('c');
+        expect(getCharacter(0)).toHaveAttribute('data-state', 'correct');
+        expect(getCharacter(1)).toHaveAttribute('data-state', 'current');
+        expect(screen.getByTestId('current-position')).toHaveTextContent('1 / 3');
+    });
+
+    it('commits a single composed character without duplicating it', async () => {
+        fetchMock.mockResolvedValueOnce(jsonResponse(CREATED_SESSION, 201));
+
+        render(<TypingTest />);
+
+        const surface = await waitForReadySession();
+
+        fireEvent.compositionStart(surface);
+
+        fireEvent.input(surface, {
+            target: { value: 'c' },
+        });
+
+        expect(screen.getByTestId('current-position')).toHaveTextContent('0 / 3');
+
+        fireEvent.compositionEnd(surface);
+
+        expect(surface).toHaveValue('c');
+        expect(getCharacter(0)).toHaveAttribute('data-state', 'correct');
+        expect(screen.getByTestId('current-position')).toHaveTextContent('1 / 3');
+
+        fireEvent.input(surface, {
+            target: { value: 'c' },
+        });
+
+        expect(screen.getByTestId('current-position')).toHaveTextContent('1 / 3');
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('prevents clipboard paste into the typing input', async () => {
+        fetchMock.mockResolvedValueOnce(jsonResponse(CREATED_SESSION, 201));
+
+        render(<TypingTest />);
+
+        const surface = await waitForReadySession();
+
+        const pasteAllowed = fireEvent.paste(surface);
+
+        expect(pasteAllowed).toBe(false);
+        expect(surface).toHaveValue('');
+        expect(screen.getByTestId('current-position')).toHaveTextContent('0 / 3');
     });
 });
