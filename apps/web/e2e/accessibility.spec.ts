@@ -40,12 +40,18 @@ test.describe('Cross-route accessibility', () => {
 
         await expect(page.getByRole('main')).toBeAttached();
 
-        const typingSurface = page.getByRole('group', {
+        const typingSurface = page.getByRole('textbox', {
             name: 'Typing test input',
         });
 
         await expect(typingSurface).toBeVisible();
-        await expect(typingSurface).toHaveAttribute('tabindex', '0');
+
+        await expect(typingSurface).toHaveAttribute('inputmode', 'text');
+
+        await expect(typingSurface).toHaveAttribute(
+            'aria-describedby',
+            'typing-instructions typing-target-readable',
+        );
 
         await expect(page.locator('#typing-target-readable')).toContainText('Target text:');
 

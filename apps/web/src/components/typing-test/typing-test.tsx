@@ -78,13 +78,31 @@ function getErrorActionLabel(error: TypingError): string {
 }
 
 export function TypingTest() {
-    const typingSurfaceRef = useRef<HTMLDivElement>(null);
+    const typingSurfaceRef = useRef<HTMLTextAreaElement>(null);
+    const composingRef = useRef(false);
 
-    const { mode, session, status, result, behavioral, error, handleKeyDown, restartSession } =
+    const { mode, session, status, result, behavioral, error, handleTextInput, restartSession } =
         useTypingSession();
 
+    function syncTypingInput(target: HTMLTextAreaElement, timestampMs: number): void {
+        const acceptedValue = handleTextInput(target.value, timestampMs);
+
+        if (target.value !== acceptedValue) {
+            target.value = acceptedValue;
+        }
+
+        if (document.activeElement === target) {
+            target.setSelectionRange(acceptedValue.length, acceptedValue.length);
+        }
+    }
+
     useEffect(() => {
-        if (status === 'ready' && session?.status === 'idle') {
+        if (
+            status === 'ready' &&
+            session?.status === 'idle' &&
+            typeof window.matchMedia === 'function' &&
+            window.matchMedia('(hover: hover) and (pointer: fine)').matches
+        ) {
             typingSurfaceRef.current?.focus();
         }
 
@@ -189,17 +207,7 @@ export function TypingTest() {
                             {session.currentPosition} / {totalCharacters}
                         </span>
 
-                        <div
-                            ref={typingSurfaceRef}
-                            data-testid="typing-surface"
-                            role="group"
-                            tabIndex={0}
-                            aria-label="Typing test input"
-                            aria-describedby="typing-instructions typing-target-readable"
-                            onKeyDown={handleKeyDown}
-                            onClick={() => typingSurfaceRef.current?.focus()}
-                            className="w-full outline-none"
-                        >
+                        <div className="focus-within:ring-accent relative w-full">
                             <p id="typing-target-readable" className="sr-only">
                                 Target text: {session.targetText}
                             </p>
@@ -207,6 +215,73 @@ export function TypingTest() {
                             <div aria-hidden="true" className="px-1 py-4">
                                 <TypingText session={session} />
                             </div>
+
+                            <textarea
+                                ref={typingSurfaceRef}
+                                data-testid="typing-surface"
+                                aria-label="Typing test input"
+                                aria-describedby="typing-instructions typing-target-readable"
+                                autoComplete="off"
+                                autoCapitalize="off"
+                                autoCorrect="off"
+                                spellCheck={false}
+                                inputMode="text"
+                                rows={1}
+                                defaultValue=""
+                                className="absolute inset-0 z-10 h-full w-full resize-none overflow-hidden bg-transparent text-base text-transparent caret-transparent outline-none"
+                                onBeforeInput={(event) => {
+                                    const nativeEvent = event.nativeEvent;
+
+                                    if (
+                                        nativeEvent.inputType === 'insertFromPaste' ||
+                                        nativeEvent.inputType === 'insertFromDrop' ||
+                                        nativeEvent.inputType === 'historyUndo' ||
+                                        nativeEvent.inputType === 'historyRedo'
+                                    ) {
+                                        event.preventDefault();
+                                    }
+                                }}
+                                onPaste={(event) => {
+                                    event.preventDefault();
+                                }}
+                                onDrop={(event) => {
+                                    event.preventDefault();
+                                }}
+                                onKeyDown={(event) => {
+                                    if (event.key === 'Enter') {
+                                        event.preventDefault();
+                                    }
+                                }}
+                                onCompositionStart={() => {
+                                    composingRef.current = true;
+                                }}
+                                onCompositionEnd={(event) => {
+                                    composingRef.current = false;
+                                    syncTypingInput(event.currentTarget, event.timeStamp);
+                                }}
+                                onInput={(event) => {
+                                    if (composingRef.current || event.nativeEvent.isComposing) {
+                                        return;
+                                    }
+
+                                    syncTypingInput(event.currentTarget, event.timeStamp);
+                                }}
+                                onSelect={(event) => {
+                                    if (composingRef.current) {
+                                        return;
+                                    }
+
+                                    const target = event.currentTarget;
+                                    const end = target.value.length;
+
+                                    if (
+                                        target.selectionStart !== end ||
+                                        target.selectionEnd !== end
+                                    ) {
+                                        target.setSelectionRange(end, end);
+                                    }
+                                }}
+                            />
                         </div>
 
                         <p
